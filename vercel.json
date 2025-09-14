@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "version": 2,
   "builds": [
@@ -23,3 +24,10 @@
     "NODE_ENV": "production"
   }
 }
+=======
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite"
+}
+>>>>>>> aa4c4138fc83238a2f1b5a8491a3a5e95fab20eb
