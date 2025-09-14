@@ -1,0 +1,280 @@
+/* 评价表单样式 */
+.review-form-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.review-form {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.review-form-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.review-form-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.review-form-header p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.review-form-content {
+  padding: 24px;
+}
+
+.error-message {
+  background: #fed7d7;
+  color: #c53030;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  border-left: 4px solid #e53e3e;
+}
+
+.rating-section {
+  margin-bottom: 24px;
+}
+
+.rating-group {
+  margin-bottom: 20px;
+}
+
+.rating-label {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.star-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.star {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.star:hover {
+  transform: scale(1.1);
+}
+
+.star.active {
+  filter: drop-shadow(0 0 4px rgba(255, 193, 7, 0.5));
+}
+
+.star:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.rating-text {
+  font-size: 14px;
+  color: #6b7280;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.detailed-ratings {
+  margin-bottom: 24px;
+}
+
+.detailed-ratings h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.rating-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.comment-section {
+  margin-bottom: 24px;
+}
+
+.comment-section label {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.comment-section textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.comment-section textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.comment-section textarea:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.comment-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.anonymous-section {
+  margin-bottom: 24px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #3b82f6;
+}
+
+.checkbox-label:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.anonymous-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  margin-left: 26px;
+}
+
+.review-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 12px 12px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .review-form-overlay {
+    padding: 10px;
+  }
+  
+  .review-form {
+    max-height: 95vh;
+  }
+  
+  .review-form-header {
+    padding: 20px 20px 12px;
+  }
+  
+  .review-form-content {
+    padding: 20px;
+  }
+  
+  .rating-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .review-form-actions {
+    flex-direction: column;
+    padding: 16px 20px;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+}
