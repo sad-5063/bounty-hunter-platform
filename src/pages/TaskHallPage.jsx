@@ -1,63 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { taskAPI } from '../services/taskAPI';
+import { useNavigate } from 'react-router-dom';
 import TaskCard from '../components/tasks/TaskCard';
 import TaskFilter from '../components/tasks/TaskFilter';
+import { taskAPI } from '../services/taskAPI';
 import './TaskHallPage.css';
 
 const TaskHallPage = () => {
-  const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
-  const [filteredTasks, setFilteredTasks] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filters, setFilters] = useState({
+    category: '',
+    location: '',
+    minReward: '',
+    maxReward: '',
+    status: '',
+    sortBy: 'created_at'
+  });
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [filters, setFilters] = useState({});
-
-  const TASKS_PER_PAGE = 12;
-
-  useEffect(() => {
-    loadInitialData();
-  }, []);
+  const [hasMore, setHasMore] = useState(true);
+  
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadTasks();
-  }, [currentPage, filters]);
-
-  const loadInitialData = async () => {
-    try {
-      const [categoriesData, skillsData] = await Promise.all([
-        taskAPI.getCategories(),
-        taskAPI.getSkills()
-      ]);
-      
-      setCategories(categoriesData);
-      setSkills(skillsData);
-    } catch (error) {
-      console.error('加载初始数据失败:', error);
-    }
-  };
+  }, [filters, currentPage]);
 
   const loadTasks = async () => {
-    setLoading(true);
-    setError('');
-
     try {
-      const params = {
+      setLoading(true);
+      setError('');
+      
+      const response = await taskAPI.getTasks({
+        ...filters,
         page: currentPage,
-        limit: TASKS_PER_PAGE,
-        ...filters
-      };
-
-      const response = await taskAPI.getTasks(params);
-      setTasks(response.tasks);
-      setFilteredTasks(response.tasks);
-      setTotalPages(Math.ceil(response.total / TASKS_PER_PAGE));
-    } catch (error) {
-      setError('加载任务失败: ' + error.message);
+        limit: 10
+      });
+      
+      if (currentPage === 1) {
+        setTasks(response.tasks);
+      } else {
+        setTasks(prev => [...prev, ...response.tasks]);
+      }
+      
+      setHasMore(response.hasMore);
+    } catch (err) {
+      setError(err.message || '加载任务失败');
     } finally {
       setLoading(false);
     }
@@ -65,145 +53,97 @@ const TaskHallPage = () => {
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
-    setCurrentPage(1); // 重置到第一页
+    setCurrentPage(1);
   };
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleTaskApply = async (taskId) => {
-    if (!user) {
-      alert('请先登录');
-      return;
-    }
-
+  const handleAcceptTask = async (taskId) => {
     try {
-      await taskAPI.applyTask(taskId);
-      alert('申请成功！');
-      loadTasks(); // 重新加载任务列表
-    } catch (error) {
-      alert('申请失败: ' + error.message);
+      await taskAPI.acceptTask(taskId);
+      // 重新加载任务列表
+      setCurrentPage(1);
+      loadTasks();
+    } catch (err) {
+      alert(err.message || '接受任务失败');
     }
   };
 
-  const renderPagination = () => {
-    if (totalPages <= 1) return null;
-
-    const pages = [];
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(
-        <button
-          key={i}
-          className={`pagination-btn ${i === currentPage ? 'active' : ''}`}
-          onClick={() => handlePageChange(i)}
-        >
-          {i}
-        </button>
-      );
-    }
-
-    return (
-      <div className="pagination">
-        <button
-          className="pagination-btn"
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-        >
-          上一页
-        </button>
-        {pages}
-        <button
-          className="pagination-btn"
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-        >
-          下一页
-        </button>
-      </div>
-    );
+  const handleViewDetails = (taskId) => {
+    navigate(`/task/${taskId}`);
   };
 
-  if (loading && tasks.length === 0) {
-    return (
-      <div className="task-hall-loading">
-        <div className="loading-spinner"></div>
-        <p>加载任务中...</p>
-      </div>
-    );
-  }
+  const handleLoadMore = () => {
+    setCurrentPage(prev => prev + 1);
+  };
+
+  const handleCreateTask = () => {
+    navigate('/task/create');
+  };
 
   return (
     <div className="task-hall-page">
-      <div className="task-hall-header">
-        <h1>任务大厅</h1>
-        <p>发现适合您的任务，开始您的赏金猎人之路</p>
+      <div className="page-header">
+        <div className="header-content">
+          <h1>任务大厅</h1>
+          <p>发现并接受您感兴趣的任务</p>
+        </div>
+        <button className="create-task-btn" onClick={handleCreateTask}>
+          <span className="btn-icon">➕</span>
+          发布任务
+        </button>
       </div>
 
-      <div className="task-hall-content">
-        <div className="task-hall-sidebar">
-          <TaskFilter
-            onFilterChange={handleFilterChange}
-            categories={categories}
-            skills={skills}
-          />
+      <div className="page-content">
+        <div className="sidebar">
+          <TaskFilter onFilterChange={handleFilterChange} />
         </div>
 
-        <div className="task-hall-main">
+        <div className="main-content">
           {error && (
             <div className="error-message">
               {error}
             </div>
           )}
 
-          <div className="task-hall-stats">
-            <div className="stat-item">
-              <span className="stat-number">{filteredTasks.length}</span>
-              <span className="stat-label">个任务</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-number">
-                {filteredTasks.reduce((sum, task) => sum + task.reward, 0).toLocaleString()}
-              </span>
-              <span className="stat-label">总赏金</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-number">
-                {categories.length}
-              </span>
-              <span className="stat-label">个分类</span>
-            </div>
-          </div>
-
-          {filteredTasks.length === 0 ? (
-            <div className="no-tasks">
-              <div className="no-tasks-icon">🔍</div>
-              <h3>暂无任务</h3>
-              <p>没有找到符合条件的任务，请尝试调整筛选条件</p>
-              <button 
-                className="btn btn-primary"
-                onClick={() => setFilters({})}
-              >
-                清除筛选
-              </button>
+          {loading && tasks.length === 0 ? (
+            <div className="loading-state">
+              <div className="loading-spinner"></div>
+              <p>加载任务中...</p>
             </div>
           ) : (
             <>
-              <div className="task-grid">
-                {filteredTasks.map(task => (
+              <div className="tasks-grid">
+                {tasks.map(task => (
                   <TaskCard
                     key={task.task_id}
                     task={task}
-                    showActions={true}
+                    onAccept={handleAcceptTask}
+                    onViewDetails={handleViewDetails}
                   />
                 ))}
               </div>
 
-              {renderPagination()}
+              {tasks.length === 0 && !loading && (
+                <div className="empty-state">
+                  <div className="empty-icon">📋</div>
+                  <h3>暂无任务</h3>
+                  <p>当前没有符合条件的任务，请调整筛选条件或稍后再试</p>
+                  <button className="btn-primary" onClick={handleCreateTask}>
+                    发布第一个任务
+                  </button>
+                </div>
+              )}
+
+              {hasMore && tasks.length > 0 && (
+                <div className="load-more-section">
+                  <button 
+                    className="load-more-btn"
+                    onClick={handleLoadMore}
+                    disabled={loading}
+                  >
+                    {loading ? '加载中...' : '加载更多'}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>

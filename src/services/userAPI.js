@@ -1,177 +1,167 @@
-// 用户相关API服务
+import axios from 'axios';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-class UserAPI {
-  // 上传头像
-  async uploadAvatar(file) {
-    const formData = new FormData();
-    formData.append('avatar', file);
+// 创建axios实例
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
+// 请求拦截器 - 添加token
+api.interceptors.request.use(
+  (config) => {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/users/upload-avatar`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '头像上传失败');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
-    const result = await response.json();
-    return result.avatar_url;
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
+);
 
-  // 获取用户统计信息
-  async getUserStats(userId, token) {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/stats`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取用户统计失败');
+// 用户相关API
+export const userAPI = {
+  // 获取用户资料
+  getProfile: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取用户资料失败');
     }
+  },
 
-    return await response.json();
-  }
+  // 更新用户资料
+  updateProfile: async (userId, userData) => {
+    try {
+      const response = await api.put(`/users/${userId}`, userData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '更新用户资料失败');
+    }
+  },
+
+  // 上传头像
+  uploadAvatar: async (userId, file) => {
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      
+      const response = await api.post(`/users/${userId}/avatar`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '上传头像失败');
+    }
+  },
 
   // 获取用户任务历史
-  async getUserTasks(userId, token, params = {}) {
-    const queryParams = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/tasks?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取任务历史失败');
+  getTaskHistory: async (userId, page = 1, limit = 10) => {
+    try {
+      const response = await api.get(`/users/${userId}/tasks`, {
+        params: { page, limit },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取任务历史失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取用户评价历史
-  async getUserReviews(userId, token) {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/reviews`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取评价历史失败');
+  // 获取用户钱包余额
+  getWalletBalance: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}/wallet`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取钱包余额失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 删除用户账户
-  async deleteAccount(token, password) {
-    const response = await fetch(`${API_BASE_URL}/users/delete-account`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '删除账户失败');
+  // 获取用户信誉评分
+  getReputation: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}/reputation`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取信誉评分失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取用户通知
-  async getNotifications(token, params = {}) {
-    const queryParams = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/users/notifications?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取通知失败');
+  // 获取用户统计信息
+  getUserStats: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}/stats`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取用户统计失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 标记通知为已读
-  async markNotificationAsRead(token, notificationId) {
-    const response = await fetch(`${API_BASE_URL}/users/notifications/${notificationId}/read`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '标记通知失败');
+  // 搜索用户
+  searchUsers: async (query, page = 1, limit = 10) => {
+    try {
+      const response = await api.get('/users/search', {
+        params: { query, page, limit },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '搜索用户失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取用户设置
-  async getUserSettings(token) {
-    const response = await fetch(`${API_BASE_URL}/users/settings`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取用户设置失败');
+  // 关注用户
+  followUser: async (userId, targetUserId) => {
+    try {
+      const response = await api.post(`/users/${userId}/follow`, {
+        targetUserId,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '关注用户失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 更新用户设置
-  async updateUserSettings(token, settings) {
-    const response = await fetch(`${API_BASE_URL}/users/settings`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(settings),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '更新用户设置失败');
+  // 取消关注用户
+  unfollowUser: async (userId, targetUserId) => {
+    try {
+      const response = await api.delete(`/users/${userId}/follow/${targetUserId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '取消关注失败');
     }
+  },
 
-    return await response.json();
-  }
-}
+  // 获取关注列表
+  getFollowing: async (userId, page = 1, limit = 10) => {
+    try {
+      const response = await api.get(`/users/${userId}/following`, {
+        params: { page, limit },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取关注列表失败');
+    }
+  },
 
-export const userAPI = new UserAPI();
+  // 获取粉丝列表
+  getFollowers: async (userId, page = 1, limit = 10) => {
+    try {
+      const response = await api.get(`/users/${userId}/followers`, {
+        params: { page, limit },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取粉丝列表失败');
+    }
+  },
+};
+
+export default userAPI;

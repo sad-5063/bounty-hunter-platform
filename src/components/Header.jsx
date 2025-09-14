@@ -1,90 +1,42 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Header.css';
 
 const Header = () => {
-  const { user, isAuthenticated, logout } = useAuth();
-  const location = useLocation();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.error('登出失败:', error);
-    }
+  const handleLogout = () => {
+    logout();
+    navigate('/');
   };
 
   return (
     <header className="header">
       <div className="header-container">
-        <div className="header-left">
-          <Link to="/" className="logo">
-            <span className="logo-icon">🎯</span>
-            <span className="logo-text">赏金猎人</span>
-          </Link>
-        </div>
-
-        <nav className="header-nav">
-          <Link 
-            to="/" 
-            className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
-          >
-            首页
-          </Link>
-          <Link 
-            to="/tasks" 
-            className={`nav-link ${location.pathname === '/tasks' ? 'active' : ''}`}
-          >
-            任务大厅
-          </Link>
-          <Link 
-            to="/help" 
-            className={`nav-link ${location.pathname === '/help' ? 'active' : ''}`}
-          >
-            帮助
-          </Link>
-          <Link 
-            to="/about" 
-            className={`nav-link ${location.pathname === '/about' ? 'active' : ''}`}
-          >
-            关于我们
-          </Link>
+        <Link to="/" className="logo">
+          <h1>赏金猎人平台</h1>
+        </Link>
+        
+        <nav className="nav">
+          <Link to="/" className="nav-link">首页</Link>
+          <Link to="/tasks" className="nav-link">任务大厅</Link>
+          <Link to="/help" className="nav-link">帮助</Link>
+          <Link to="/about" className="nav-link">关于我们</Link>
         </nav>
 
-        <div className="header-right">
-          {isAuthenticated ? (
+        <div className="user-section">
+          {user ? (
             <div className="user-menu">
-              <div className="user-info">
-                <span className="user-avatar">
-                  {user?.name?.charAt(0) || 'U'}
-                </span>
-                <span className="user-name">{user?.name}</span>
-              </div>
-              <div className="user-dropdown">
-                <Link to="/dashboard" className="dropdown-item">
-                  📊 个人中心
-                </Link>
-                <Link to="/my-tasks" className="dropdown-item">
-                  📋 我的任务
-                </Link>
-                <Link to="/wallet" className="dropdown-item">
-                  💰 钱包
-                </Link>
-                <div className="dropdown-divider"></div>
-                <button onClick={handleLogout} className="dropdown-item logout">
-                  🚪 退出登录
-                </button>
-              </div>
+              <span className="user-name">欢迎, {user.name}</span>
+              <Link to="/dashboard" className="btn btn-primary">个人中心</Link>
+              <button onClick={handleLogout} className="btn btn-secondary">退出</button>
             </div>
           ) : (
             <div className="auth-buttons">
-              <Link to="/login" className="btn btn-secondary btn-sm">
-                登录
-              </Link>
-              <Link to="/register" className="btn btn-primary btn-sm">
-                注册
-              </Link>
+              <Link to="/login" className="btn btn-secondary">登录</Link>
+              <Link to="/register" className="btn btn-primary">注册</Link>
             </div>
           )}
         </div>

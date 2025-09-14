@@ -1,192 +1,214 @@
-/* 消息页面样式 */
 .messages-page {
+  min-height: 100vh;
+  padding: 2rem 0;
+}
+
+.messages-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.messages-container h1 {
+  margin-bottom: 2rem;
+  color: #333;
+  font-size: 2.5rem;
+}
+
+.messages-tabs {
   display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #f8fafc;
-  padding: 20px;
-  gap: 20px;
+  border-bottom: 2px solid #e1e5e9;
+  margin-bottom: 2rem;
 }
 
-.messages-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: white;
-  padding: 20px 24px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.messages-header h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.tab-switcher {
-  display: flex;
-  gap: 8px;
-  background: #f3f4f6;
-  padding: 4px;
-  border-radius: 8px;
-}
-
-.tab-btn {
-  padding: 8px 16px;
+.tab {
+  padding: 1rem 2rem;
   border: none;
   background: none;
-  color: #6b7280;
-  font-size: 14px;
+  cursor: pointer;
+  font-size: 1rem;
   font-weight: 500;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  color: #666;
+  transition: all 0.3s ease;
+  border-bottom: 3px solid transparent;
 }
 
-.tab-btn:hover {
-  color: #374151;
-  background: #e5e7eb;
+.tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
 }
 
-.tab-btn.active {
-  background: white;
-  color: #3b82f6;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.error-banner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #fed7d7;
-  color: #c53030;
-  padding: 12px 16px;
-  border-radius: 8px;
-  border-left: 4px solid #e53e3e;
-  font-size: 14px;
-}
-
-.error-banner button {
-  background: none;
-  border: none;
-  color: #c53030;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.tab:hover {
+  color: #333;
 }
 
 .messages-content {
-  flex: 1;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.messages-list,
+.notifications-list {
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 
-/* 对话布局 */
-.conversations-layout {
+.message-item,
+.notification-item {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e1e5e9;
+  transition: all 0.3s ease;
+}
+
+.message-item:hover,
+.notification-item:hover {
+  background: #f8f9fa;
+}
+
+.message-item.unread,
+.notification-item.unread {
+  background: #e3f2fd;
+  border-left: 4px solid #667eea;
+}
+
+.message-header {
   display: flex;
-  gap: 20px;
-  height: 100%;
-  min-height: 0;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
-.conversations-sidebar {
-  width: 350px;
-  min-width: 300px;
-  height: 100%;
+.message-sender {
+  font-weight: 500;
+  color: #333;
 }
 
-.chat-main {
+.message-date {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.message-subject {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.message-content {
+  color: #666;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.message-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.notification-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.notification-icon {
+  font-size: 2rem;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  border-radius: 50%;
+}
+
+.notification-content {
   flex: 1;
-  height: 100%;
-  min-width: 0;
 }
 
-/* 通知布局 */
-.notifications-layout {
-  height: 100%;
-  min-height: 0;
+.notification-title {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.notification-text {
+  color: #666;
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.notification-date {
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.notification-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #5a6fd8;
+}
+
+.btn-secondary {
+  background: #f8f9fa;
+  color: #333;
+  border: 2px solid #e1e5e9;
+}
+
+.btn-secondary:hover {
+  background: #e9ecef;
 }
 
 /* 响应式设计 */
-@media (max-width: 1024px) {
-  .conversations-layout {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .conversations-sidebar {
-    width: 100%;
-    height: 300px;
-    min-height: 300px;
-  }
-  
-  .chat-main {
-    height: calc(100% - 316px);
-  }
-}
-
 @media (max-width: 768px) {
-  .messages-page {
-    padding: 12px;
-    gap: 12px;
+  .messages-container h1 {
+    font-size: 2rem;
   }
   
-  .messages-header {
-    padding: 16px 20px;
+  .messages-tabs {
     flex-direction: column;
-    gap: 16px;
-    align-items: stretch;
   }
   
-  .messages-header h2 {
-    font-size: 20px;
+  .message-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .message-actions {
+    flex-direction: column;
+  }
+  
+  .notification-item {
+    flex-direction: column;
+    align-items: flex-start;
     text-align: center;
   }
   
-  .tab-switcher {
-    justify-content: center;
-  }
-  
-  .tab-btn {
-    padding: 6px 12px;
-    font-size: 13px;
-  }
-  
-  .conversations-sidebar {
-    height: 250px;
-    min-height: 250px;
-  }
-  
-  .chat-main {
-    height: calc(100% - 262px);
-  }
-}
-
-@media (max-width: 480px) {
-  .messages-page {
-    padding: 8px;
-    gap: 8px;
-  }
-  
-  .messages-header {
-    padding: 12px 16px;
-  }
-  
-  .tab-switcher {
-    flex-direction: column;
-    gap: 4px;
-  }
-  
-  .tab-btn {
-    width: 100%;
-    padding: 8px 12px;
+  .notification-content {
+    text-align: center;
   }
 }

@@ -1,360 +1,216 @@
-// 钱包相关API服务
+import axios from 'axios';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-class WalletAPI {
-  // 获取用户钱包信息
-  async getWallet() {
+// 创建axios实例
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// 请求拦截器 - 添加token
+api.interceptors.request.use(
+  (config) => {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取钱包信息失败');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
-    return await response.json();
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
+);
+
+// 钱包相关API
+export const walletAPI = {
+  // 获取钱包信息
+  getWallet: async (userId) => {
+    try {
+      const response = await api.get(`/wallet/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取钱包信息失败');
+    }
+  },
 
   // 获取交易记录
-  async getTransactions(params = {}) {
-    const token = localStorage.getItem('token');
-    const queryParams = new URLSearchParams();
-    
-    Object.keys(params).forEach(key => {
-      if (params[key] !== undefined && params[key] !== '') {
-        queryParams.append(key, params[key]);
-      }
-    });
-
-    const response = await fetch(`${API_BASE_URL}/wallet/transactions?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取交易记录失败');
+  getTransactions: async (userId, page = 1, limit = 20) => {
+    try {
+      const response = await api.get(`/wallet/${userId}/transactions`, {
+        params: { page, limit }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取交易记录失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 创建充值订单
-  async createDeposit(depositData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/deposit`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(depositData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '创建充值订单失败');
+  // 充值
+  topUp: async (userId, amount, method) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/topup`, {
+        amount,
+        method
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '充值失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 创建提现申请
-  async createWithdrawal(withdrawalData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/withdraw`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(withdrawalData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '创建提现申请失败');
+  // 提现
+  withdraw: async (userId, amount, account) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/withdraw`, {
+        amount,
+        account
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '提现失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取充值记录
-  async getDeposits(params = {}) {
-    const token = localStorage.getItem('token');
-    const queryParams = new URLSearchParams(params);
-    
-    const response = await fetch(`${API_BASE_URL}/wallet/deposits?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取充值记录失败');
+  // 转账
+  transfer: async (userId, targetUserId, amount, description) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/transfer`, {
+        targetUserId,
+        amount,
+        description
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '转账失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取提现记录
-  async getWithdrawals(params = {}) {
-    const token = localStorage.getItem('token');
-    const queryParams = new URLSearchParams(params);
-    
-    const response = await fetch(`${API_BASE_URL}/wallet/withdrawals?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取提现记录失败');
+  // 获取余额
+  getBalance: async (userId) => {
+    try {
+      const response = await api.get(`/wallet/${userId}/balance`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取余额失败');
     }
-
-    return await response.json();
-  }
-
-  // 获取支付方式列表
-  async getPaymentMethods() {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/payment-methods`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取支付方式失败');
-    }
-
-    return await response.json();
-  }
-
-  // 添加支付方式
-  async addPaymentMethod(paymentMethodData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/payment-methods`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(paymentMethodData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '添加支付方式失败');
-    }
-
-    return await response.json();
-  }
-
-  // 删除支付方式
-  async deletePaymentMethod(paymentMethodId) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/payment-methods/${paymentMethodId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '删除支付方式失败');
-    }
-
-    return await response.json();
-  }
-
-  // 设置默认支付方式
-  async setDefaultPaymentMethod(paymentMethodId) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/payment-methods/${paymentMethodId}/default`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '设置默认支付方式失败');
-    }
-
-    return await response.json();
-  }
-
-  // 获取钱包统计信息
-  async getWalletStats(params = {}) {
-    const token = localStorage.getItem('token');
-    const queryParams = new URLSearchParams(params);
-    
-    const response = await fetch(`${API_BASE_URL}/wallet/stats?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取钱包统计失败');
-    }
-
-    return await response.json();
-  }
+  },
 
   // 冻结资金
-  async freezeFunds(freezeData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/freeze`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(freezeData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '冻结资金失败');
+  freezeFunds: async (userId, amount, reason) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/freeze`, {
+        amount,
+        reason
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '冻结资金失败');
     }
-
-    return await response.json();
-  }
+  },
 
   // 解冻资金
-  async unfreezeFunds(unfreezeData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/unfreeze`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(unfreezeData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '解冻资金失败');
+  unfreezeFunds: async (userId, amount, reason) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/unfreeze`, {
+        amount,
+        reason
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '解冻资金失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取系统配置
-  async getSystemSettings() {
-    const response = await fetch(`${API_BASE_URL}/wallet/settings`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取系统配置失败');
+  // 获取交易详情
+  getTransaction: async (transactionId) => {
+    try {
+      const response = await api.get(`/transactions/${transactionId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取交易详情失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 验证支付密码
-  async verifyPaymentPassword(password) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/verify-payment-password`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '支付密码验证失败');
+  // 确认交易
+  confirmTransaction: async (transactionId, code) => {
+    try {
+      const response = await api.post(`/transactions/${transactionId}/confirm`, {
+        code
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '确认交易失败');
     }
+  },
 
-    return await response.json();
-  }
+  // 取消交易
+  cancelTransaction: async (transactionId, reason) => {
+    try {
+      const response = await api.post(`/transactions/${transactionId}/cancel`, {
+        reason
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '取消交易失败');
+    }
+  },
+
+  // 获取钱包统计
+  getWalletStats: async (userId) => {
+    try {
+      const response = await api.get(`/wallet/${userId}/stats`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取钱包统计失败');
+    }
+  },
 
   // 设置支付密码
-  async setPaymentPassword(passwordData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/wallet/set-payment-password`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(passwordData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '设置支付密码失败');
+  setPaymentPassword: async (userId, password) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/payment-password`, {
+        password
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '设置支付密码失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 导出交易记录
-  async exportTransactions(params = {}) {
-    const token = localStorage.getItem('token');
-    const queryParams = new URLSearchParams(params);
-    
-    const response = await fetch(`${API_BASE_URL}/wallet/export?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '导出交易记录失败');
+  // 验证支付密码
+  verifyPaymentPassword: async (userId, password) => {
+    try {
+      const response = await api.post(`/wallet/${userId}/verify-payment-password`, {
+        password
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '验证支付密码失败');
     }
+  },
 
-    // 处理文件下载
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+  // 获取充值方式
+  getPaymentMethods: async () => {
+    try {
+      const response = await api.get('/wallet/payment-methods');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取支付方式失败');
+    }
+  },
 
-    return { success: true };
+  // 获取提现方式
+  getWithdrawMethods: async () => {
+    try {
+      const response = await api.get('/wallet/withdraw-methods');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取提现方式失败');
+    }
   }
-}
+};
 
-export const walletAPI = new WalletAPI();
+export default walletAPI;

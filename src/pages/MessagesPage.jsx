@@ -1,228 +1,112 @@
-import React, { useState, useEffect } from 'react';
-import ConversationList from '../components/messages/ConversationList';
-import ChatInterface from '../components/messages/ChatInterface';
-import NotificationCenter from '../components/messages/NotificationCenter';
-import { messageAPI } from '../services/messageAPI';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState } from 'react';
 import './MessagesPage.css';
 
 const MessagesPage = () => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('conversations');
-  const [conversations, setConversations] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  // 加载对话列表
-  const loadConversations = async () => {
-    try {
-      setLoading(true);
-      const response = await messageAPI.getConversations();
-      setConversations(response.conversations || []);
-    } catch (error) {
-      setError('加载对话失败: ' + error.message);
-    } finally {
-      setLoading(false);
+  const [activeTab, setActiveTab] = useState('messages');
+  const [messages] = useState([
+    {
+      id: 1,
+      sender: '张三',
+      senderEmail: 'zhangsan@example.com',
+      subject: '关于网站设计任务的讨论',
+      content: '您好，我想了解一下网站设计任务的具体要求...',
+      date: '2025-01-10',
+      unread: true
+    },
+    {
+      id: 2,
+      sender: '李四',
+      senderEmail: 'lisi@example.com',
+      subject: '任务完成确认',
+      content: '任务已经完成，请查看附件...',
+      date: '2025-01-09',
+      unread: false
     }
-  };
+  ]);
 
-  // 加载通知列表
-  const loadNotifications = async () => {
-    try {
-      setLoading(true);
-      const response = await messageAPI.getNotifications();
-      setNotifications(response.notifications || []);
-    } catch (error) {
-      setError('加载通知失败: ' + error.message);
-    } finally {
-      setLoading(false);
+  const [notifications] = useState([
+    {
+      id: 1,
+      type: 'task_accepted',
+      title: '任务被接受',
+      content: '您的"网站设计任务"已被接受',
+      date: '2025-01-10',
+      unread: true
+    },
+    {
+      id: 2,
+      type: 'payment_received',
+      title: '收到付款',
+      content: '您收到了¥2000的任务完成费用',
+      date: '2025-01-09',
+      unread: false
     }
-  };
-
-  // 选择对话
-  const handleSelectConversation = async (conversation) => {
-    try {
-      setLoading(true);
-      const response = await messageAPI.getConversationMessages(conversation.conversation_id);
-      setSelectedConversation({
-        ...conversation,
-        messages: response.messages || []
-      });
-    } catch (error) {
-      setError('加载消息失败: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 发送消息
-  const handleSendMessage = async (messageData) => {
-    try {
-      const response = await messageAPI.sendMessage(messageData);
-      
-      // 更新本地消息列表
-      if (selectedConversation) {
-        setSelectedConversation(prev => ({
-          ...prev,
-          messages: [...(prev.messages || []), response.message]
-        }));
-      }
-      
-      // 更新对话列表中的最后消息
-      setConversations(prev => 
-        prev.map(conv => 
-          conv.conversation_id === messageData.conversation_id
-            ? { ...conv, last_message: response.message, last_message_at: response.message.created_at }
-            : conv
-        )
-      );
-    } catch (error) {
-      throw new Error('发送消息失败: ' + error.message);
-    }
-  };
-
-  // 开始新对话
-  const handleStartNewChat = () => {
-    // 这里可以打开用户选择对话框
-    console.log('开始新对话');
-  };
-
-  // 标记通知为已读
-  const handleMarkAsRead = async (notificationId) => {
-    try {
-      await messageAPI.markNotificationAsRead(notificationId);
-      setNotifications(prev => 
-        prev.map(notif => 
-          notif.notification_id === notificationId
-            ? { ...notif, is_read: true, read_at: new Date().toISOString() }
-            : notif
-        )
-      );
-    } catch (error) {
-      setError('标记已读失败: ' + error.message);
-    }
-  };
-
-  // 标记所有通知为已读
-  const handleMarkAllAsRead = async () => {
-    try {
-      await messageAPI.markAllNotificationsAsRead();
-      setNotifications(prev => 
-        prev.map(notif => ({ 
-          ...notif, 
-          is_read: true, 
-          read_at: new Date().toISOString() 
-        }))
-      );
-    } catch (error) {
-      setError('标记全部已读失败: ' + error.message);
-    }
-  };
-
-  // 删除通知
-  const handleDeleteNotification = async (notificationId) => {
-    try {
-      await messageAPI.deleteNotification(notificationId);
-      setNotifications(prev => prev.filter(notif => notif.notification_id !== notificationId));
-    } catch (error) {
-      setError('删除通知失败: ' + error.message);
-    }
-  };
-
-  // 删除所有通知
-  const handleDeleteAllNotifications = async () => {
-    try {
-      await messageAPI.deleteAllNotifications();
-      setNotifications([]);
-    } catch (error) {
-      setError('清空通知失败: ' + error.message);
-    }
-  };
-
-  // 组件挂载时加载数据
-  useEffect(() => {
-    if (user) {
-      loadConversations();
-      loadNotifications();
-    }
-  }, [user]);
-
-  // 设置实时更新（这里可以集成WebSocket）
-  useEffect(() => {
-    // 这里可以设置WebSocket连接来实时接收消息和通知
-    // const ws = new WebSocket('ws://localhost:3001/ws');
-    // ws.onmessage = (event) => {
-    //   const data = JSON.parse(event.data);
-    //   // 处理实时消息和通知
-    // };
-    
-    return () => {
-      // 清理WebSocket连接
-    };
-  }, []);
+  ]);
 
   return (
     <div className="messages-page">
-      <div className="messages-header">
-        <h2>消息中心</h2>
-        <div className="tab-switcher">
+      <div className="messages-container">
+        <h1>消息中心</h1>
+        
+        <div className="messages-tabs">
           <button 
-            className={`tab-btn ${activeTab === 'conversations' ? 'active' : ''}`}
-            onClick={() => setActiveTab('conversations')}
+            className={`tab ${activeTab === 'messages' ? 'active' : ''}`}
+            onClick={() => setActiveTab('messages')}
           >
-            💬 对话
+            私信 ({messages.filter(m => m.unread).length})
           </button>
           <button 
-            className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
+            className={`tab ${activeTab === 'notifications' ? 'active' : ''}`}
             onClick={() => setActiveTab('notifications')}
           >
-            🔔 通知
+            通知 ({notifications.filter(n => n.unread).length})
           </button>
         </div>
-      </div>
-
-      {error && (
-        <div className="error-banner">
-          <span>{error}</span>
-          <button onClick={() => setError('')}>×</button>
+        
+        <div className="messages-content">
+          {activeTab === 'messages' && (
+            <div className="messages-section">
+              <div className="messages-list">
+                {messages.map(message => (
+                  <div key={message.id} className={`message-item ${message.unread ? 'unread' : ''}`}>
+                    <div className="message-header">
+                      <div className="message-sender">{message.sender}</div>
+                      <div className="message-date">{message.date}</div>
+                    </div>
+                    <div className="message-subject">{message.subject}</div>
+                    <div className="message-content">{message.content}</div>
+                    <div className="message-actions">
+                      <button className="btn btn-primary">回复</button>
+                      <button className="btn btn-secondary">删除</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {activeTab === 'notifications' && (
+            <div className="notifications-section">
+              <div className="notifications-list">
+                {notifications.map(notification => (
+                  <div key={notification.id} className={`notification-item ${notification.unread ? 'unread' : ''}`}>
+                    <div className="notification-icon">
+                      {notification.type === 'task_accepted' ? '🎯' : '💰'}
+                    </div>
+                    <div className="notification-content">
+                      <div className="notification-title">{notification.title}</div>
+                      <div className="notification-text">{notification.content}</div>
+                      <div className="notification-date">{notification.date}</div>
+                    </div>
+                    <div className="notification-actions">
+                      <button className="btn btn-secondary">标记已读</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      <div className="messages-content">
-        {activeTab === 'conversations' ? (
-          <div className="conversations-layout">
-            <div className="conversations-sidebar">
-              <ConversationList
-                conversations={conversations}
-                currentUser={user}
-                onSelectConversation={handleSelectConversation}
-                onStartNewChat={handleStartNewChat}
-                loading={loading}
-              />
-            </div>
-            <div className="chat-main">
-              <ChatInterface
-                conversation={selectedConversation}
-                currentUser={user}
-                onSendMessage={handleSendMessage}
-                loading={loading}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="notifications-layout">
-            <NotificationCenter
-              notifications={notifications}
-              onMarkAsRead={handleMarkAsRead}
-              onMarkAllAsRead={handleMarkAllAsRead}
-              onDeleteNotification={handleDeleteNotification}
-              onDeleteAllNotifications={handleDeleteAllNotifications}
-              loading={loading}
-            />
-          </div>
-        )}
       </div>
     </div>
   );

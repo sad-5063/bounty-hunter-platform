@@ -1,419 +1,421 @@
-// 评价控制器 - 后端API实现示例
-const { v4: uuidv4 } = require('uuid');
-const TaskReview = require('../models/TaskReview');
-const ReviewReply = require('../models/ReviewReply');
-const UserReputation = require('../models/UserReputation');
-const ReputationBadge = require('../models/ReputationBadge');
-const ReviewReport = require('../models/ReviewReport');
-const ReputationRule = require('../models/ReputationRule');
+// 评价控制器 - Node.js/Express 后端伪代码
+const { Pool } = require('pg');
 
-class ReviewController {
-  // 提交任务评价
-  async submitReview(req, res) {
+// 数据库连接
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// 创建评价
+const createReview = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { taskId, targetUserId, rating, comment } = req.body;
+
+    // 验证输入
+    if (!taskId || !targetUserId || !rating) {
+      return res.status(400).json({ message: '请填写所有必填字段' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ message: '评分必须在1-5之间' });
+    }
+
+    if (targetUserId === userId) {
+      return res.status(400).json({ message: '不能给自己评价' });
+    }
+
+    // 开始事务
+    const client = await pool.connect();
     try {
-      const userId = req.user.userId;
-      const {
-        task_id,
-        target_id,
-        review_type,
-        rating,
-        comment,
-        quality_rating,
-        communication_rating,
-        timeliness_rating,
-        professionalism_rating,
-        is_anonymous
-      } = req.body;
+      await client.query('BEGIN');
 
-      // 验证输入
-      if (!task_id || !target_id || !review_type || !rating) {
-        return res.status(400).json({
-          success: false,
-          message: '任务ID、目标用户、评价类型和评分是必填项'
-        });
+      // 检查任务是否存在且已完成
+      const taskResult = await client.query(`
+        SELECT * FROM tasks WHERE task_id = $1 AND status = 'completed'
+      `, [taskId]);
+
+      if (taskResult.rows.length === 0) {
+        return res.status(404).json({ message: '任务不存在或未完成' });
       }
 
-      if (rating < 1 || rating > 5) {
-        return res.status(400).json({
-          success: false,
-          message: '评分必须在1-5之间'
-        });
+      const task = taskResult.rows[0];
+
+      // 检查用户是否有权限评价
+      if (task.publisher_id !== userId && task.hunter_id !== userId) {
+        return res.status(403).json({ message: '无权限评价此任务' });
+      }
+
+      // 检查目标用户是否参与此任务
+      if (task.publisher_id !== targetUserId && task.hunter_id !== targetUserId) {
+        return res.status(400).json({ message: '目标用户未参与此任务' });
       }
 
       // 检查是否已经评价过
-      const existingReview = await TaskReview.findOne({
-        task_id,
-        reviewer_id: userId,
-        review_type
-      });
+      const existingReviewResult = await client.query(`
+        SELECT * FROM reviews 
+        WHERE task_id = $1 AND reviewer_id = $2 AND target_id = $3
+      `, [taskId, userId, targetUserId]);
 
-      if (existingReview) {
-        return res.status(400).json({
-          success: false,
-          message: '您已经对此任务进行过评价'
-        });
+      if (existingReviewResult.rows.length > 0) {
+        return res.status(400).json({ message: '您已经评价过此用户' });
       }
 
       // 创建评价
-      const review = new TaskReview({
-        review_id: uuidv4(),
-        task_id,
-        reviewer_id: userId,
-        target_id,
-        rating: parseInt(rating),
-        comment: comment || '',
-        quality_rating: quality_rating ? parseInt(quality_rating) : null,
-        communication_rating: communication_rating ? parseInt(communication_rating) : null,
-        timeliness_rating: timeliness_rating ? parseInt(timeliness_rating) : null,
-        professionalism_rating: professionalism_rating ? parseInt(professionalism_rating) : null,
-        review_type,
-        is_anonymous: is_anonymous || false,
-        status: 'active',
-        created_at: new Date(),
-        updated_at: new Date()
-      });
+      const reviewResult = await client.query(`
+        INSERT INTO reviews (task_id, reviewer_id, target_id, rating, comment)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+      `, [taskId, userId, targetUserId, rating, comment]);
 
-      await review.save();
+      const review = reviewResult.rows[0];
 
-      // 更新用户信誉
-      await this.updateUserReputation(target_id);
+      // 更新目标用户的信誉评分
+      await updateUserReputation(client, targetUserId);
+
+      await client.query('COMMIT');
 
       res.status(201).json({
-        success: true,
-        message: '评价提交成功',
-        review: {
-          review_id: review.review_id,
-          rating: review.rating,
-          comment: review.comment,
-          review_type: review.review_type,
-          created_at: review.created_at
-        }
+        message: '评价创建成功',
+        review
       });
 
     } catch (error) {
-      console.error('提交评价错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
+
+  } catch (error) {
+    console.error('创建评价错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 获取任务评价列表
-  async getTaskReviews(req, res) {
-    try {
-      const { taskId } = req.params;
-      const {
-        page = 1,
-        limit = 20,
-        filter = 'all',
-        sortBy = 'newest'
-      } = req.query;
+// 获取用户评价
+const getUserReviews = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 20 } = req.query;
 
-      // 构建查询条件
-      const query = { task_id: taskId, status: 'active' };
-      
-      if (filter !== 'all') {
-        switch (filter) {
-          case 'positive':
-            query.rating = { $gte: 4 };
-            break;
-          case 'negative':
-            query.rating = { $lte: 2 };
-            break;
-          case 'neutral':
-            query.rating = 3;
-            break;
-        }
-      }
+    const offset = (page - 1) * limit;
 
-      // 排序
-      let sort = {};
-      switch (sortBy) {
-        case 'newest':
-          sort = { created_at: -1 };
-          break;
-        case 'oldest':
-          sort = { created_at: 1 };
-          break;
-        case 'highest':
-          sort = { rating: -1 };
-          break;
-        case 'lowest':
-          sort = { rating: 1 };
-          break;
-        default:
-          sort = { created_at: -1 };
-      }
+    const result = await pool.query(`
+      SELECT r.*, 
+             u.name as reviewer_name,
+             u.avatar_url as reviewer_avatar,
+             t.title as task_title
+      FROM reviews r
+      LEFT JOIN users u ON r.reviewer_id = u.user_id
+      LEFT JOIN tasks t ON r.task_id = t.task_id
+      WHERE r.target_id = $1
+      ORDER BY r.created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [userId, parseInt(limit), offset]);
 
-      // 分页
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+    // 获取总数
+    const countResult = await pool.query(`
+      SELECT COUNT(*) FROM reviews WHERE target_id = $1
+    `, [userId]);
 
-      const [reviews, total] = await Promise.all([
-        TaskReview.find(query)
-          .populate('reviewer_id', 'name avatar_url')
-          .populate('target_id', 'name avatar_url')
-          .sort(sort)
-          .skip(skip)
-          .limit(parseInt(limit)),
-        TaskReview.countDocuments(query)
-      ]);
+    const totalCount = parseInt(countResult.rows[0].count);
+    const hasMore = offset + result.rows.length < totalCount;
 
-      res.json({
-        success: true,
-        reviews,
-        total,
+    res.json({
+      reviews: result.rows,
+      pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
-      });
-
-    } catch (error) {
-      console.error('获取任务评价错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
-    }
-  }
-
-  // 获取用户信誉信息
-  async getUserReputation(req, res) {
-    try {
-      const { userId } = req.params;
-
-      let reputation = await UserReputation.findOne({ user_id: userId });
-      
-      if (!reputation) {
-        // 如果信誉记录不存在，创建一个新的
-        reputation = new UserReputation({
-          reputation_id: uuidv4(),
-          user_id: userId,
-          reputation_score: 5.00,
-          reputation_level: 'newbie',
-          total_reviews: 0,
-          positive_reviews: 0,
-          negative_reviews: 0,
-          neutral_reviews: 0,
-          avg_quality_rating: 0.00,
-          avg_communication_rating: 0.00,
-          avg_timeliness_rating: 0.00,
-          avg_professionalism_rating: 0.00,
-          badges: [],
-          reputation_history: [],
-          is_verified: false,
-          last_calculated_at: new Date(),
-          created_at: new Date(),
-          updated_at: new Date()
-        });
-        await reputation.save();
+        total: totalCount,
+        hasMore
       }
+    });
+
+  } catch (error) {
+    console.error('获取用户评价错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+};
+
+// 获取任务评价
+const getTaskReviews = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    const result = await pool.query(`
+      SELECT r.*, 
+             u1.name as reviewer_name,
+             u1.avatar_url as reviewer_avatar,
+             u2.name as target_name,
+             u2.avatar_url as target_avatar
+      FROM reviews r
+      LEFT JOIN users u1 ON r.reviewer_id = u1.user_id
+      LEFT JOIN users u2 ON r.target_id = u2.user_id
+      WHERE r.task_id = $1
+      ORDER BY r.created_at DESC
+    `, [taskId]);
+
+    res.json({ reviews: result.rows });
+
+  } catch (error) {
+    console.error('获取任务评价错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+};
+
+// 更新评价
+const updateReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const userId = req.user.userId;
+    const { rating, comment } = req.body;
+
+    // 检查评价是否存在且用户有权限修改
+    const reviewResult = await pool.query(`
+      SELECT * FROM reviews WHERE review_id = $1 AND reviewer_id = $2
+    `, [reviewId, userId]);
+
+    if (reviewResult.rows.length === 0) {
+      return res.status(404).json({ message: '评价不存在或无权限修改' });
+    }
+
+    const review = reviewResult.rows[0];
+
+    // 检查是否超过修改时间限制（例如24小时）
+    const reviewTime = new Date(review.created_at);
+    const now = new Date();
+    const hoursDiff = (now - reviewTime) / (1000 * 60 * 60);
+
+    if (hoursDiff > 24) {
+      return res.status(400).json({ message: '超过修改时间限制' });
+    }
+
+    // 开始事务
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 更新评价
+      const updateResult = await client.query(`
+        UPDATE reviews 
+        SET rating = $1, comment = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE review_id = $3
+        RETURNING *
+      `, [rating, comment, reviewId]);
+
+      // 重新计算目标用户的信誉评分
+      await updateUserReputation(client, review.target_id);
+
+      await client.query('COMMIT');
 
       res.json({
-        success: true,
-        reputation
+        message: '评价更新成功',
+        review: updateResult.rows[0]
       });
 
     } catch (error) {
-      console.error('获取用户信誉错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
+
+  } catch (error) {
+    console.error('更新评价错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 更新用户信誉
-  async updateUserReputation(userId) {
+// 删除评价
+const deleteReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const userId = req.user.userId;
+
+    // 检查评价是否存在且用户有权限删除
+    const reviewResult = await pool.query(`
+      SELECT * FROM reviews WHERE review_id = $1 AND reviewer_id = $2
+    `, [reviewId, userId]);
+
+    if (reviewResult.rows.length === 0) {
+      return res.status(404).json({ message: '评价不存在或无权限删除' });
+    }
+
+    const review = reviewResult.rows[0];
+
+    // 开始事务
+    const client = await pool.connect();
     try {
-      // 获取用户的所有评价
-      const reviews = await TaskReview.find({
-        target_id: userId,
-        status: 'active'
-      });
+      await client.query('BEGIN');
 
-      if (reviews.length === 0) {
-        return;
+      // 删除评价
+      await client.query('DELETE FROM reviews WHERE review_id = $1', [reviewId]);
+
+      // 重新计算目标用户的信誉评分
+      await updateUserReputation(client, review.target_id);
+
+      await client.query('COMMIT');
+
+      res.json({ message: '评价删除成功' });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('删除评价错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+};
+
+// 获取用户信誉评分
+const getUserReputation = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const result = await pool.query(`
+      SELECT 
+        u.reputation_score,
+        u.created_at,
+        COUNT(r.review_id) as review_count,
+        COALESCE(AVG(r.rating), 0) as average_rating,
+        COUNT(t.task_id) as completed_tasks
+      FROM users u
+      LEFT JOIN reviews r ON u.user_id = r.target_id
+      LEFT JOIN tasks t ON u.user_id = t.hunter_id AND t.status = 'completed'
+      WHERE u.user_id = $1
+      GROUP BY u.user_id, u.reputation_score, u.created_at
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: '用户不存在' });
+    }
+
+    const user = result.rows[0];
+
+    res.json({
+      reputation_score: user.reputation_score,
+      review_count: parseInt(user.review_count),
+      average_rating: parseFloat(user.average_rating),
+      completed_tasks: parseInt(user.completed_tasks),
+      created_at: user.created_at
+    });
+
+  } catch (error) {
+    console.error('获取用户信誉评分错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+};
+
+// 更新用户信誉评分（内部函数）
+const updateUserReputation = async (client, userId) => {
+  try {
+    // 计算新的信誉评分
+    const result = await client.query(`
+      SELECT 
+        COUNT(*) as review_count,
+        COALESCE(AVG(rating), 0) as average_rating,
+        COUNT(CASE WHEN rating >= 4 THEN 1 END) as good_reviews,
+        COUNT(CASE WHEN rating <= 2 THEN 1 END) as bad_reviews
+      FROM reviews 
+      WHERE target_id = $1
+    `, [userId]);
+
+    const stats = result.rows[0];
+    const reviewCount = parseInt(stats.review_count);
+    const averageRating = parseFloat(stats.average_rating);
+    const goodReviews = parseInt(stats.good_reviews);
+    const badReviews = parseInt(stats.bad_reviews);
+
+    // 计算信誉评分（0-100分）
+    let reputationScore = 50; // 基础分
+
+    if (reviewCount > 0) {
+      // 基于平均评分
+      reputationScore = averageRating * 20; // 1-5星转换为20-100分
+
+      // 基于好评率调整
+      const goodRate = reviewCount > 0 ? goodReviews / reviewCount : 0;
+      const badRate = reviewCount > 0 ? badReviews / reviewCount : 0;
+
+      // 好评率奖励
+      if (goodRate >= 0.8) reputationScore += 10;
+      else if (goodRate >= 0.6) reputationScore += 5;
+
+      // 差评率惩罚
+      if (badRate >= 0.3) reputationScore -= 15;
+      else if (badRate >= 0.2) reputationScore -= 10;
+
+      // 评价数量奖励
+      if (reviewCount >= 50) reputationScore += 5;
+      else if (reviewCount >= 20) reputationScore += 3;
+      else if (reviewCount >= 10) reputationScore += 1;
+    }
+
+    // 确保分数在0-100范围内
+    reputationScore = Math.max(0, Math.min(100, Math.round(reputationScore)));
+
+    // 更新用户信誉评分
+    await client.query(`
+      UPDATE users 
+      SET reputation_score = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = $2
+    `, [reputationScore, userId]);
+
+  } catch (error) {
+    console.error('更新用户信誉评分错误:', error);
+    throw error;
+  }
+};
+
+// 获取评价统计
+const getReviewStats = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as total_reviews,
+        COALESCE(AVG(rating), 0) as average_rating,
+        COUNT(CASE WHEN rating = 5 THEN 1 END) as five_star,
+        COUNT(CASE WHEN rating = 4 THEN 1 END) as four_star,
+        COUNT(CASE WHEN rating = 3 THEN 1 END) as three_star,
+        COUNT(CASE WHEN rating = 2 THEN 1 END) as two_star,
+        COUNT(CASE WHEN rating = 1 THEN 1 END) as one_star
+      FROM reviews 
+      WHERE target_id = $1
+    `, [userId]);
+
+    const stats = result.rows[0];
+
+    res.json({
+      total_reviews: parseInt(stats.total_reviews),
+      average_rating: parseFloat(stats.average_rating),
+      rating_distribution: {
+        five_star: parseInt(stats.five_star),
+        four_star: parseInt(stats.four_star),
+        three_star: parseInt(stats.three_star),
+        two_star: parseInt(stats.two_star),
+        one_star: parseInt(stats.one_star)
       }
+    });
 
-      // 计算统计数据
-      const totalReviews = reviews.length;
-      const positiveReviews = reviews.filter(r => r.rating >= 4).length;
-      const negativeReviews = reviews.filter(r => r.rating <= 2).length;
-      const neutralReviews = reviews.filter(r => r.rating === 3).length;
-
-      // 计算平均评分
-      const avgRating = reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews;
-      
-      // 计算各维度平均分
-      const qualityReviews = reviews.filter(r => r.quality_rating);
-      const communicationReviews = reviews.filter(r => r.communication_rating);
-      const timelinessReviews = reviews.filter(r => r.timeliness_rating);
-      const professionalismReviews = reviews.filter(r => r.professionalism_rating);
-
-      const avgQualityRating = qualityReviews.length > 0 
-        ? qualityReviews.reduce((sum, r) => sum + r.quality_rating, 0) / qualityReviews.length 
-        : 0;
-      const avgCommunicationRating = communicationReviews.length > 0 
-        ? communicationReviews.reduce((sum, r) => sum + r.communication_rating, 0) / communicationReviews.length 
-        : 0;
-      const avgTimelinessRating = timelinessReviews.length > 0 
-        ? timelinessReviews.reduce((sum, r) => sum + r.timeliness_rating, 0) / timelinessReviews.length 
-        : 0;
-      const avgProfessionalismRating = professionalismReviews.length > 0 
-        ? professionalismReviews.reduce((sum, r) => sum + r.professionalism_rating, 0) / professionalismReviews.length 
-        : 0;
-
-      // 计算信誉值（基于平均评分，范围0-10）
-      const reputationScore = Math.min(Math.max(avgRating * 2, 0), 10);
-
-      // 确定信誉等级
-      let reputationLevel = 'newbie';
-      if (reputationScore >= 9) reputationLevel = 'diamond';
-      else if (reputationScore >= 8) reputationLevel = 'platinum';
-      else if (reputationScore >= 7) reputationLevel = 'gold';
-      else if (reputationScore >= 6) reputationLevel = 'silver';
-      else if (reputationScore >= 5) reputationLevel = 'bronze';
-
-      // 更新或创建信誉记录
-      await UserReputation.findOneAndUpdate(
-        { user_id: userId },
-        {
-          reputation_score: reputationScore,
-          reputation_level: reputationLevel,
-          total_reviews: totalReviews,
-          positive_reviews: positiveReviews,
-          negative_reviews: negativeReviews,
-          neutral_reviews: neutralReviews,
-          avg_quality_rating: avgQualityRating,
-          avg_communication_rating: avgCommunicationRating,
-          avg_timeliness_rating: avgTimelinessRating,
-          avg_professionalism_rating: avgProfessionalismRating,
-          last_calculated_at: new Date(),
-          updated_at: new Date()
-        },
-        { upsert: true, new: true }
-      );
-
-      // 检查并授予徽章
-      await this.checkAndAwardBadges(userId);
-
-    } catch (error) {
-      console.error('更新用户信誉错误:', error);
-    }
+  } catch (error) {
+    console.error('获取评价统计错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 检查并授予徽章
-  async checkAndAwardBadges(userId) {
-    try {
-      const reputation = await UserReputation.findOne({ user_id: userId });
-      if (!reputation) return;
-
-      const badges = await ReputationBadge.find({ is_active: true });
-      const userBadges = reputation.badges || [];
-
-      for (const badge of badges) {
-        // 检查是否已经拥有此徽章
-        if (userBadges.some(b => b.badge_id === badge.badge_id)) {
-          continue;
-        }
-
-        let shouldAward = false;
-
-        switch (badge.condition_type) {
-          case 'rating_threshold':
-            if (badge.badge_category === 'quality' && reputation.avg_quality_rating >= badge.condition_value) {
-              shouldAward = true;
-            } else if (badge.badge_category === 'communication' && reputation.avg_communication_rating >= badge.condition_value) {
-              shouldAward = true;
-            } else if (badge.badge_category === 'timeliness' && reputation.avg_timeliness_rating >= badge.condition_value) {
-              shouldAward = true;
-            } else if (badge.badge_category === 'professionalism' && reputation.avg_professionalism_rating >= badge.condition_value) {
-              shouldAward = true;
-            }
-            break;
-          case 'review_count':
-            if (reputation.total_reviews >= badge.condition_value) {
-              shouldAward = true;
-            }
-            break;
-          case 'task_count':
-            // 这里需要从任务表获取用户完成的任务数
-            // 暂时跳过
-            break;
-        }
-
-        if (shouldAward) {
-          userBadges.push({
-            badge_id: badge.badge_id,
-            badge_name: badge.badge_name,
-            badge_icon: badge.badge_icon,
-            badge_color: badge.badge_color,
-            awarded_at: new Date()
-          });
-        }
-      }
-
-      // 更新用户徽章
-      if (userBadges.length !== reputation.badges.length) {
-        await UserReputation.findOneAndUpdate(
-          { user_id: userId },
-          { badges: userBadges, updated_at: new Date() }
-        );
-      }
-
-    } catch (error) {
-      console.error('检查徽章错误:', error);
-    }
-  }
-
-  // 检查是否可以评价
-  async canReview(req, res) {
-    try {
-      const userId = req.user.userId;
-      const { task_id, review_type } = req.body;
-
-      // 检查是否已经评价过
-      const existingReview = await TaskReview.findOne({
-        task_id,
-        reviewer_id: userId,
-        review_type
-      });
-
-      res.json({
-        success: true,
-        can_review: !existingReview,
-        existing_review: existingReview
-      });
-
-    } catch (error) {
-      console.error('检查评价权限错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
-    }
-  }
-
-  // 获取信誉徽章列表
-  async getReputationBadges(req, res) {
-    try {
-      const badges = await ReputationBadge.find({ is_active: true })
-        .sort({ sort_order: 1 });
-
-      res.json({
-        success: true,
-        badges
-      });
-
-    } catch (error) {
-      console.error('获取徽章列表错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
-    }
-  }
-}
-
-module.exports = new ReviewController();
+module.exports = {
+  createReview,
+  getUserReviews,
+  getTaskReviews,
+  updateReview,
+  deleteReview,
+  getUserReputation,
+  getReviewStats
+};

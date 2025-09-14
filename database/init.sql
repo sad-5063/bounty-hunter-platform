@@ -570,3 +570,4 @@ BEGIN
     RAISE NOTICE '默认密码: admin123';
     RAISE NOTICE '请在生产环境中修改默认密码！';
 END $$;
+

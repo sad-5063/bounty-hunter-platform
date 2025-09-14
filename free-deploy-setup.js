@@ -310,3 +310,4 @@ if (require.main === module) {
 }
 
 module.exports = { config, createVercelConfig, createSupabaseConfig, createEnvFile };
+

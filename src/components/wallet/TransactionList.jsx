@@ -1,179 +1,142 @@
 import React, { useState } from 'react';
-import { formatDistanceToNow } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 import './TransactionList.css';
 
-const TransactionList = ({ transactions, loading = false }) => {
+const TransactionList = ({ transactions, onLoadMore }) => {
   const [filter, setFilter] = useState('all');
 
-  const formatAmount = (amount, type, currency = 'CNY') => {
-    const formatted = new Intl.NumberFormat('zh-CN', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(Math.abs(amount));
+  const formatCurrency = (amount) => {
+    return `¥${amount.toFixed(2)}`;
+  };
 
-    const prefix = ['deposit', 'task_reward', 'refund', 'bonus'].includes(type) ? '+' : '-';
-    return `${prefix}${formatted}`;
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString('zh-CN');
   };
 
   const getTransactionIcon = (type) => {
-    const icons = {
-      deposit: '💰',
-      withdrawal: '💸',
-      task_payment: '📤',
-      task_reward: '📥',
-      refund: '🔄',
-      fee: '💳',
-      bonus: '🎁'
-    };
-    return icons[type] || '💼';
+    switch (type) {
+      case 'deposit': return '💰';
+      case 'withdrawal': return '💸';
+      case 'task_reward': return '🎯';
+      case 'task_payment': return '💳';
+      default: return '📄';
+    }
   };
 
   const getTransactionTypeText = (type) => {
-    const texts = {
-      deposit: '充值',
-      withdrawal: '提现',
-      task_payment: '任务支付',
-      task_reward: '任务奖励',
-      refund: '退款',
-      fee: '手续费',
-      bonus: '奖励'
-    };
-    return texts[type] || type;
+    switch (type) {
+      case 'deposit': return '充值';
+      case 'withdrawal': return '提现';
+      case 'task_reward': return '任务奖励';
+      case 'task_payment': return '任务支付';
+      default: return '其他';
+    }
   };
 
   const getStatusColor = (status) => {
-    const colors = {
-      completed: '#10b981',
-      pending: '#f59e0b',
-      processing: '#3b82f6',
-      failed: '#ef4444',
-      cancelled: '#6b7280',
-      refunded: '#8b5cf6'
-    };
-    return colors[status] || '#6b7280';
+    switch (status) {
+      case 'completed': return '#10b981';
+      case 'pending': return '#f59e0b';
+      case 'failed': return '#ef4444';
+      case 'cancelled': return '#6b7280';
+      default: return '#6b7280';
+    }
   };
 
   const getStatusText = (status) => {
-    const texts = {
-      completed: '已完成',
-      pending: '处理中',
-      processing: '处理中',
-      failed: '失败',
-      cancelled: '已取消',
-      refunded: '已退款'
-    };
-    return texts[status] || status;
+    switch (status) {
+      case 'completed': return '已完成';
+      case 'pending': return '处理中';
+      case 'failed': return '失败';
+      case 'cancelled': return '已取消';
+      default: return '未知';
+    }
   };
 
   const filteredTransactions = transactions.filter(transaction => {
     if (filter === 'all') return true;
-    if (filter === 'income') return ['deposit', 'task_reward', 'refund', 'bonus'].includes(transaction.type);
-    if (filter === 'expense') return ['withdrawal', 'task_payment', 'fee'].includes(transaction.type);
     return transaction.type === filter;
   });
 
-  if (loading) {
-    return (
-      <div className="transaction-list-loading">
-        <div className="loading-spinner"></div>
-        <p>加载交易记录中...</p>
-      </div>
-    );
-  }
-
-  if (transactions.length === 0) {
-    return (
-      <div className="transaction-list-empty">
-        <div className="empty-icon">📊</div>
-        <h3>暂无交易记录</h3>
-        <p>您还没有任何交易记录</p>
-      </div>
-    );
-  }
+  const transactionTypes = [
+    { value: 'all', label: '全部' },
+    { value: 'deposit', label: '充值' },
+    { value: 'withdrawal', label: '提现' },
+    { value: 'task_reward', label: '任务奖励' },
+    { value: 'task_payment', label: '任务支付' }
+  ];
 
   return (
     <div className="transaction-list">
       <div className="transaction-header">
         <h3>交易记录</h3>
-        <div className="transaction-filters">
-          <button 
-            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
+        <div className="transaction-filter">
+          <select 
+            value={filter} 
+            onChange={(e) => setFilter(e.target.value)}
           >
-            全部
-          </button>
-          <button 
-            className={`filter-btn ${filter === 'income' ? 'active' : ''}`}
-            onClick={() => setFilter('income')}
-          >
-            收入
-          </button>
-          <button 
-            className={`filter-btn ${filter === 'expense' ? 'active' : ''}`}
-            onClick={() => setFilter('expense')}
-          >
-            支出
-          </button>
+            {transactionTypes.map(type => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       <div className="transaction-items">
-        {filteredTransactions.map(transaction => (
-          <div key={transaction.transaction_id} className="transaction-item">
-            <div className="transaction-icon">
-              {getTransactionIcon(transaction.type)}
-            </div>
-            
-            <div className="transaction-details">
-              <div className="transaction-info">
-                <div className="transaction-type">
-                  {getTransactionTypeText(transaction.type)}
+        {filteredTransactions.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📄</div>
+            <p>暂无交易记录</p>
+          </div>
+        ) : (
+          filteredTransactions.map(transaction => (
+            <div key={transaction.transaction_id} className="transaction-item">
+              <div className="transaction-icon">
+                {getTransactionIcon(transaction.type)}
+              </div>
+              
+              <div className="transaction-details">
+                <div className="transaction-info">
+                  <span className="transaction-type">
+                    {getTransactionTypeText(transaction.type)}
+                  </span>
+                  <span className="transaction-date">
+                    {formatDate(transaction.created_at)}
+                  </span>
                 </div>
-                <div className="transaction-description">
-                  {transaction.description || '无描述'}
-                </div>
-                <div className="transaction-time">
-                  {formatDistanceToNow(new Date(transaction.created_at), { 
-                    addSuffix: true, 
-                    locale: zhCN 
-                  })}
-                </div>
+                
+                {transaction.description && (
+                  <div className="transaction-description">
+                    {transaction.description}
+                  </div>
+                )}
               </div>
               
               <div className="transaction-amount">
-                <div className={`amount ${['deposit', 'task_reward', 'refund', 'bonus'].includes(transaction.type) ? 'positive' : 'negative'}`}>
-                  {formatAmount(transaction.amount, transaction.type, transaction.currency)}
-                </div>
-                <div className="transaction-status">
-                  <span 
-                    className="status-badge"
-                    style={{ backgroundColor: getStatusColor(transaction.status) }}
-                  >
-                    {getStatusText(transaction.status)}
-                  </span>
-                </div>
+                <span 
+                  className={`amount ${transaction.type === 'deposit' || transaction.type === 'task_reward' ? 'positive' : 'negative'}`}
+                >
+                  {transaction.type === 'deposit' || transaction.type === 'task_reward' ? '+' : '-'}
+                  {formatCurrency(Math.abs(transaction.amount))}
+                </span>
+                <span 
+                  className="status"
+                  style={{ color: getStatusColor(transaction.status) }}
+                >
+                  {getStatusText(transaction.status)}
+                </span>
               </div>
             </div>
-
-            {transaction.fee_amount > 0 && (
-              <div className="transaction-fee">
-                手续费: {new Intl.NumberFormat('zh-CN', {
-                  style: 'currency',
-                  currency: transaction.currency,
-                  minimumFractionDigits: 2
-                }).format(transaction.fee_amount)}
-              </div>
-            )}
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
-      {filteredTransactions.length === 0 && filter !== 'all' && (
-        <div className="no-transactions">
-          <p>没有找到符合条件的交易记录</p>
+      {filteredTransactions.length > 0 && onLoadMore && (
+        <div className="load-more">
+          <button className="load-more-btn" onClick={onLoadMore}>
+            加载更多
+          </button>
         </div>
       )}
     </div>

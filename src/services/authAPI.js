@@ -1,188 +1,139 @@
-// 认证相关API服务
+import axios from 'axios';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-class AuthAPI {
-  // 登录
-  async login(email, password) {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
+// 创建axios实例
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '登录失败');
+// 请求拦截器 - 添加token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
-    return await response.json();
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
+);
 
-  // 注册
-  async register(userData) {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(userData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '注册失败');
+// 响应拦截器 - 处理token过期
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
-
-    return await response.json();
+    return Promise.reject(error);
   }
+);
 
-  // 登出
-  async logout(token) {
-    const response = await fetch(`${API_BASE_URL}/auth/logout`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '登出失败');
+// 认证相关API
+export const authAPI = {
+  // 用户注册
+  register: async (name, email, password) => {
+    try {
+      const response = await api.post('/auth/register', {
+        name,
+        email,
+        password,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '注册失败');
     }
+  },
 
-    return await response.json();
-  }
+  // 用户登录
+  login: async (email, password) => {
+    try {
+      const response = await api.post('/auth/login', {
+        email,
+        password,
+      });
+      
+      // 保存token和用户信息
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+      
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '登录失败');
+    }
+  },
+
+  // 用户登出
+  logout: () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  },
 
   // 获取当前用户信息
-  async getCurrentUser(token) {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取用户信息失败');
+  getCurrentUser: async () => {
+    try {
+      const response = await api.get('/auth/me');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取用户信息失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 更新用户资料
-  async updateProfile(token, profileData) {
-    const response = await fetch(`${API_BASE_URL}/auth/profile`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(profileData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '更新资料失败');
+  // 更新用户信息
+  updateProfile: async (userData) => {
+    try {
+      const response = await api.put('/auth/profile', userData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '更新用户信息失败');
     }
-
-    return await response.json();
-  }
+  },
 
   // 修改密码
-  async changePassword(token, currentPassword, newPassword) {
-    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '修改密码失败');
+  changePassword: async (currentPassword, newPassword) => {
+    try {
+      const response = await api.put('/auth/password', {
+        currentPassword,
+        newPassword,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '修改密码失败');
     }
-
-    return await response.json();
-  }
+  },
 
   // 忘记密码
-  async forgotPassword(email) {
-    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '发送重置邮件失败');
+  forgotPassword: async (email) => {
+    try {
+      const response = await api.post('/auth/forgot-password', { email });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '发送重置邮件失败');
     }
-
-    return await response.json();
-  }
+  },
 
   // 重置密码
-  async resetPassword(token, newPassword) {
-    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token, newPassword }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '重置密码失败');
+  resetPassword: async (token, newPassword) => {
+    try {
+      const response = await api.post('/auth/reset-password', {
+        token,
+        newPassword,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '重置密码失败');
     }
+  },
+};
 
-    return await response.json();
-  }
-
-  // 验证邮箱
-  async verifyEmail(token) {
-    const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '邮箱验证失败');
-    }
-
-    return await response.json();
-  }
-
-  // 重新发送验证邮件
-  async resendVerificationEmail(userToken) {
-    const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${userToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '发送验证邮件失败');
-    }
-
-    return await response.json();
-  }
-}
-
-export const authAPI = new AuthAPI();
+export default authAPI;

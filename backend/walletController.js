@@ -1,484 +1,448 @@
-// 钱包控制器 - 后端API实现示例
-const { v4: uuidv4 } = require('uuid');
-const bcrypt = require('bcryptjs');
-const Wallet = require('../models/Wallet');
-const Transaction = require('../models/Transaction');
-const Deposit = require('../models/Deposit');
-const Withdrawal = require('../models/Withdrawal');
-const PaymentMethod = require('../models/PaymentMethod');
-const SystemSetting = require('../models/SystemSetting');
+// 钱包控制器 - Node.js/Express 后端伪代码
+const { Pool } = require('pg');
 
-class WalletController {
-  // 获取用户钱包信息
-  async getWallet(req, res) {
-    try {
-      const userId = req.user.userId;
+// 数据库连接
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-      let wallet = await Wallet.findOne({ user_id: userId });
-      
-      if (!wallet) {
-        // 如果钱包不存在，创建一个新的
-        wallet = new Wallet({
-          wallet_id: uuidv4(),
-          user_id: userId,
-          balance: 0.00,
-          frozen_balance: 0.00,
-          currency: 'CNY',
-          status: 'active',
-          created_at: new Date(),
-          updated_at: new Date()
-        });
-        await wallet.save();
-      }
+// 获取钱包信息
+const getWallet = async (req, res) => {
+  try {
+    const { userId } = req.params;
 
-      res.json({
-        success: true,
-        wallet
-      });
+    // 获取用户钱包信息
+    const walletResult = await pool.query(`
+      SELECT user_id, wallet_balance, reputation_score, created_at
+      FROM users WHERE user_id = $1
+    `, [userId]);
 
-    } catch (error) {
-      console.error('获取钱包信息错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+    if (walletResult.rows.length === 0) {
+      return res.status(404).json({ message: '用户不存在' });
     }
+
+    const user = walletResult.rows[0];
+
+    // 获取交易统计
+    const statsResult = await pool.query(`
+      SELECT 
+        COUNT(*) as transaction_count,
+        COALESCE(SUM(CASE WHEN type IN ('deposit', 'task_reward') THEN amount ELSE 0 END), 0) as total_income,
+        COALESCE(SUM(CASE WHEN type IN ('withdrawal', 'task_payment') THEN amount ELSE 0 END), 0) as total_expense
+      FROM transactions 
+      WHERE user_id = $1 AND status = 'completed'
+    `, [userId]);
+
+    const stats = statsResult.rows[0];
+
+    const wallet = {
+      balance: parseFloat(user.wallet_balance),
+      totalIncome: parseFloat(stats.total_income),
+      totalExpense: parseFloat(stats.total_expense),
+      transactionCount: parseInt(stats.transaction_count)
+    };
+
+    res.json(wallet);
+
+  } catch (error) {
+    console.error('获取钱包信息错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 获取交易记录
-  async getTransactions(req, res) {
-    try {
-      const userId = req.user.userId;
-      const {
-        page = 1,
-        limit = 20,
-        type,
-        status,
-        startDate,
-        endDate
-      } = req.query;
+// 获取交易记录
+const getTransactions = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 20, type } = req.query;
 
-      // 构建查询条件
-      const query = { user_id: userId };
-      
-      if (type) query.type = type;
-      if (status) query.status = status;
-      if (startDate || endDate) {
-        query.created_at = {};
-        if (startDate) query.created_at.$gte = new Date(startDate);
-        if (endDate) query.created_at.$lte = new Date(endDate);
-      }
+    let query = `
+      SELECT * FROM transactions 
+      WHERE user_id = $1
+    `;
+    const params = [userId];
+    let paramCount = 1;
 
-      // 分页
-      const skip = (parseInt(page) - 1) * parseInt(limit);
+    if (type) {
+      paramCount++;
+      query += ` AND type = $${paramCount}`;
+      params.push(type);
+    }
 
-      const [transactions, total] = await Promise.all([
-        Transaction.find(query)
-          .sort({ created_at: -1 })
-          .skip(skip)
-          .limit(parseInt(limit)),
-        Transaction.countDocuments(query)
-      ]);
+    query += ` ORDER BY created_at DESC`;
 
-      res.json({
-        success: true,
-        transactions,
-        total,
+    // 添加分页
+    const offset = (page - 1) * limit;
+    paramCount++;
+    query += ` LIMIT $${paramCount}`;
+    params.push(parseInt(limit));
+
+    paramCount++;
+    query += ` OFFSET $${paramCount}`;
+    params.push(offset);
+
+    const result = await pool.query(query, params);
+
+    // 获取总数
+    let countQuery = 'SELECT COUNT(*) FROM transactions WHERE user_id = $1';
+    const countParams = [userId];
+
+    if (type) {
+      countQuery += ' AND type = $2';
+      countParams.push(type);
+    }
+
+    const countResult = await pool.query(countQuery, countParams);
+    const totalCount = parseInt(countResult.rows[0].count);
+    const hasMore = offset + result.rows.length < totalCount;
+
+    res.json({
+      transactions: result.rows,
+      pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
-      });
+        total: totalCount,
+        hasMore
+      }
+    });
+
+  } catch (error) {
+    console.error('获取交易记录错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
+  }
+};
+
+// 充值
+const topUp = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, method } = req.body;
+
+    // 验证输入
+    if (!amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ message: '充值金额必须大于0' });
+    }
+
+    if (!method) {
+      return res.status(400).json({ message: '请选择支付方式' });
+    }
+
+    const amountValue = parseFloat(amount);
+
+    // 开始事务
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 创建交易记录
+      const transactionResult = await client.query(`
+        INSERT INTO transactions (user_id, amount, type, status, description)
+        VALUES ($1, $2, 'deposit', 'pending', $3)
+        RETURNING *
+      `, [userId, amountValue, `通过${method}充值`]);
+
+      const transaction = transactionResult.rows[0];
+
+      // 这里应该调用第三方支付接口
+      // 模拟支付成功
+      const paymentSuccess = true; // 实际应该调用支付接口
+
+      if (paymentSuccess) {
+        // 更新交易状态
+        await client.query(`
+          UPDATE transactions 
+          SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+          WHERE transaction_id = $1
+        `, [transaction.transaction_id]);
+
+        // 更新用户余额
+        await client.query(`
+          UPDATE users 
+          SET wallet_balance = wallet_balance + $1
+          WHERE user_id = $2
+        `, [amountValue, userId]);
+
+        await client.query('COMMIT');
+
+        res.json({
+          message: '充值成功',
+          transaction: {
+            ...transaction,
+            status: 'completed'
+          }
+        });
+      } else {
+        await client.query('ROLLBACK');
+        res.status(400).json({ message: '支付失败' });
+      }
 
     } catch (error) {
-      console.error('获取交易记录错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
+
+  } catch (error) {
+    console.error('充值错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 创建充值订单
-  async createDeposit(req, res) {
+// 提现
+const withdraw = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, account } = req.body;
+
+    // 验证输入
+    if (!amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ message: '提现金额必须大于0' });
+    }
+
+    if (!account) {
+      return res.status(400).json({ message: '请提供提现账户信息' });
+    }
+
+    const amountValue = parseFloat(amount);
+
+    // 开始事务
+    const client = await pool.connect();
     try {
-      const userId = req.user.userId;
-      const { amount, paymentMethod, paymentAccount } = req.body;
+      await client.query('BEGIN');
 
-      // 验证输入
-      if (!amount || amount <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: '充值金额必须大于0'
-        });
+      // 检查用户余额
+      const userResult = await client.query(`
+        SELECT wallet_balance FROM users WHERE user_id = $1
+      `, [userId]);
+
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ message: '用户不存在' });
       }
 
-      // 获取系统配置
-      const minDeposit = await SystemSetting.findOne({ setting_key: 'min_deposit_amount' });
-      const maxDeposit = await SystemSetting.findOne({ setting_key: 'max_deposit_amount' });
+      const currentBalance = parseFloat(userResult.rows[0].wallet_balance);
 
-      if (amount < parseFloat(minDeposit?.setting_value || 10)) {
-        return res.status(400).json({
-          success: false,
-          message: `最小充值金额为¥${minDeposit?.setting_value || 10}`
-        });
-      }
-
-      if (amount > parseFloat(maxDeposit?.setting_value || 50000)) {
-        return res.status(400).json({
-          success: false,
-          message: `最大充值金额为¥${maxDeposit?.setting_value || 50000}`
-        });
-      }
-
-      // 获取用户钱包
-      const wallet = await Wallet.findOne({ user_id: userId });
-      if (!wallet) {
-        return res.status(404).json({
-          success: false,
-          message: '钱包不存在'
-        });
+      if (currentBalance < amountValue) {
+        return res.status(400).json({ message: '余额不足' });
       }
 
       // 创建交易记录
-      const transaction = new Transaction({
-        transaction_id: uuidv4(),
-        user_id: userId,
-        wallet_id: wallet.wallet_id,
-        type: 'deposit',
-        amount: parseFloat(amount),
-        currency: 'CNY',
-        status: 'pending',
-        description: `账户充值 - ${paymentMethod}`,
-        metadata: {
-          payment_method: paymentMethod,
-          payment_account: paymentAccount
-        },
-        created_at: new Date()
-      });
+      const transactionResult = await client.query(`
+        INSERT INTO transactions (user_id, amount, type, status, description)
+        VALUES ($1, $2, 'withdrawal', 'pending', $3)
+        RETURNING *
+      `, [userId, amountValue, `提现到${account}`]);
 
-      await transaction.save();
+      const transaction = transactionResult.rows[0];
 
-      // 创建充值记录
-      const deposit = new Deposit({
-        deposit_id: uuidv4(),
-        user_id: userId,
-        wallet_id: wallet.wallet_id,
-        transaction_id: transaction.transaction_id,
-        amount: parseFloat(amount),
-        currency: 'CNY',
-        payment_method: paymentMethod,
-        payment_account: paymentAccount,
-        status: 'pending',
-        created_at: new Date()
-      });
+      // 冻结用户资金
+      await client.query(`
+        UPDATE users 
+        SET wallet_balance = wallet_balance - $1
+        WHERE user_id = $2
+      `, [amountValue, userId]);
 
-      await deposit.save();
+      // 这里应该调用银行接口进行提现
+      // 模拟提现处理
+      const withdrawSuccess = true; // 实际应该调用银行接口
 
-      res.status(201).json({
-        success: true,
-        message: '充值订单创建成功',
-        deposit: {
-          deposit_id: deposit.deposit_id,
-          amount: deposit.amount,
-          payment_method: deposit.payment_method,
-          status: deposit.status,
-          created_at: deposit.created_at
-        },
-        transaction: {
-          transaction_id: transaction.transaction_id,
-          amount: transaction.amount,
-          status: transaction.status
-        }
-      });
+      if (withdrawSuccess) {
+        // 更新交易状态
+        await client.query(`
+          UPDATE transactions 
+          SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+          WHERE transaction_id = $1
+        `, [transaction.transaction_id]);
+
+        await client.query('COMMIT');
+
+        res.json({
+          message: '提现申请已提交，请等待处理',
+          transaction: {
+            ...transaction,
+            status: 'completed'
+          }
+        });
+      } else {
+        // 提现失败，退还资金
+        await client.query(`
+          UPDATE users 
+          SET wallet_balance = wallet_balance + $1
+          WHERE user_id = $2
+        `, [amountValue, userId]);
+
+        await client.query(`
+          UPDATE transactions 
+          SET status = 'failed', completed_at = CURRENT_TIMESTAMP
+          WHERE transaction_id = $1
+        `, [transaction.transaction_id]);
+
+        await client.query('COMMIT');
+
+        res.status(400).json({ message: '提现失败' });
+      }
 
     } catch (error) {
-      console.error('创建充值订单错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
+
+  } catch (error) {
+    console.error('提现错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 创建提现申请
-  async createWithdrawal(req, res) {
-    try {
-      const userId = req.user.userId;
-      const { 
-        amount, 
-        withdrawalMethod, 
-        accountHolderName, 
-        accountNumber, 
-        bankName, 
-        bankCode 
-      } = req.body;
+// 转账
+const transfer = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { targetUserId, amount, description } = req.body;
 
-      // 验证输入
-      if (!amount || amount <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: '提现金额必须大于0'
-        });
-      }
-
-      // 获取系统配置
-      const minWithdrawal = await SystemSetting.findOne({ setting_key: 'min_withdrawal_amount' });
-      const maxWithdrawal = await SystemSetting.findOne({ setting_key: 'max_withdrawal_amount' });
-      const withdrawalFeeRate = await SystemSetting.findOne({ setting_key: 'withdrawal_fee_rate' });
-      const withdrawalFeeMin = await SystemSetting.findOne({ setting_key: 'withdrawal_fee_min' });
-
-      if (amount < parseFloat(minWithdrawal?.setting_value || 50)) {
-        return res.status(400).json({
-          success: false,
-          message: `最小提现金额为¥${minWithdrawal?.setting_value || 50}`
-        });
-      }
-
-      if (amount > parseFloat(maxWithdrawal?.setting_value || 20000)) {
-        return res.status(400).json({
-          success: false,
-          message: `最大提现金额为¥${maxWithdrawal?.setting_value || 20000}`
-        });
-      }
-
-      // 获取用户钱包
-      const wallet = await Wallet.findOne({ user_id: userId });
-      if (!wallet) {
-        return res.status(404).json({
-          success: false,
-          message: '钱包不存在'
-        });
-      }
-
-      // 计算手续费
-      const feeRate = parseFloat(withdrawalFeeRate?.setting_value || 0.01);
-      const feeMin = parseFloat(withdrawalFeeMin?.setting_value || 2);
-      const feeAmount = Math.max(amount * feeRate, feeMin);
-      const totalAmount = amount + feeAmount;
-
-      // 检查余额是否足够
-      if (wallet.balance < totalAmount) {
-        return res.status(400).json({
-          success: false,
-          message: `余额不足，需要¥${totalAmount.toFixed(2)}（含手续费¥${feeAmount.toFixed(2)}）`
-        });
-      }
-
-      // 创建交易记录
-      const transaction = new Transaction({
-        transaction_id: uuidv4(),
-        user_id: userId,
-        wallet_id: wallet.wallet_id,
-        type: 'withdrawal',
-        amount: -parseFloat(amount), // 负数表示支出
-        currency: 'CNY',
-        status: 'pending',
-        description: `账户提现 - ${withdrawalMethod}`,
-        fee_amount: feeAmount,
-        fee_type: 'percentage',
-        metadata: {
-          withdrawal_method: withdrawalMethod,
-          account_holder_name: accountHolderName,
-          bank_name: bankName,
-          bank_code: bankCode
-        },
-        created_at: new Date()
-      });
-
-      await transaction.save();
-
-      // 创建提现记录
-      const withdrawal = new Withdrawal({
-        withdrawal_id: uuidv4(),
-        user_id: userId,
-        wallet_id: wallet.wallet_id,
-        transaction_id: transaction.transaction_id,
-        amount: parseFloat(amount),
-        currency: 'CNY',
-        withdrawal_method: withdrawalMethod,
-        account_holder_name: accountHolderName,
-        account_number: accountNumber,
-        bank_name: bankName,
-        bank_code: bankCode,
-        status: 'pending',
-        requires_review: true,
-        created_at: new Date()
-      });
-
-      await withdrawal.save();
-
-      res.status(201).json({
-        success: true,
-        message: '提现申请提交成功，等待审核',
-        withdrawal: {
-          withdrawal_id: withdrawal.withdrawal_id,
-          amount: withdrawal.amount,
-          fee_amount: feeAmount,
-          withdrawal_method: withdrawal.withdrawal_method,
-          status: withdrawal.status,
-          created_at: withdrawal.created_at
-        },
-        transaction: {
-          transaction_id: transaction.transaction_id,
-          amount: transaction.amount,
-          status: transaction.status
-        }
-      });
-
-    } catch (error) {
-      console.error('创建提现申请错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+    // 验证输入
+    if (!targetUserId || !amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ message: '请提供有效的转账信息' });
     }
-  }
 
-  // 获取钱包统计信息
-  async getWalletStats(req, res) {
+    if (targetUserId === userId) {
+      return res.status(400).json({ message: '不能给自己转账' });
+    }
+
+    const amountValue = parseFloat(amount);
+
+    // 开始事务
+    const client = await pool.connect();
     try {
-      const userId = req.user.userId;
-      const { period = 'month' } = req.query;
+      await client.query('BEGIN');
 
-      // 计算时间范围
-      const now = new Date();
-      let startDate;
-      
-      switch (period) {
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        case 'year':
-          startDate = new Date(now.getFullYear(), 0, 1);
-          break;
-        default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      // 检查目标用户是否存在
+      const targetUserResult = await client.query(`
+        SELECT user_id FROM users WHERE user_id = $1
+      `, [targetUserId]);
+
+      if (targetUserResult.rows.length === 0) {
+        return res.status(404).json({ message: '目标用户不存在' });
       }
 
-      // 获取统计数据
-      const [
-        totalIncome,
-        totalExpense,
-        transactionCount,
-        completedTasks
-      ] = await Promise.all([
-        Transaction.aggregate([
-          { $match: { user_id: userId, type: { $in: ['deposit', 'task_reward', 'refund', 'bonus'] }, status: 'completed', created_at: { $gte: startDate } } },
-          { $group: { _id: null, total: { $sum: '$amount' } } }
-        ]),
-        Transaction.aggregate([
-          { $match: { user_id: userId, type: { $in: ['withdrawal', 'task_payment', 'fee'] }, status: 'completed', created_at: { $gte: startDate } } },
-          { $group: { _id: null, total: { $sum: { $abs: '$amount' } } } }
-        ]),
-        Transaction.countDocuments({ user_id: userId, created_at: { $gte: startDate } }),
-        Transaction.countDocuments({ user_id: userId, type: 'task_reward', status: 'completed', created_at: { $gte: startDate } })
-      ]);
+      // 检查发送方余额
+      const senderResult = await client.query(`
+        SELECT wallet_balance FROM users WHERE user_id = $1
+      `, [userId]);
 
-      const stats = {
-        totalIncome: totalIncome[0]?.total || 0,
-        totalExpense: totalExpense[0]?.total || 0,
-        transactionCount: transactionCount || 0,
-        completedTasks: completedTasks || 0,
-        period: period,
-        startDate: startDate,
-        endDate: now
-      };
+      const senderBalance = parseFloat(senderResult.rows[0].wallet_balance);
+
+      if (senderBalance < amountValue) {
+        return res.status(400).json({ message: '余额不足' });
+      }
+
+      // 创建转账交易记录
+      const transactionResult = await client.query(`
+        INSERT INTO transactions (user_id, amount, type, status, description, target_user_id)
+        VALUES ($1, $2, 'transfer', 'completed', $3, $4)
+        RETURNING *
+      `, [userId, amountValue, description || '转账', targetUserId]);
+
+      // 更新发送方余额
+      await client.query(`
+        UPDATE users 
+        SET wallet_balance = wallet_balance - $1
+        WHERE user_id = $2
+      `, [amountValue, userId]);
+
+      // 更新接收方余额
+      await client.query(`
+        UPDATE users 
+        SET wallet_balance = wallet_balance + $1
+        WHERE user_id = $2
+      `, [amountValue, targetUserId]);
+
+      await client.query('COMMIT');
 
       res.json({
-        success: true,
-        stats
+        message: '转账成功',
+        transaction: transactionResult.rows[0]
       });
 
     } catch (error) {
-      console.error('获取钱包统计错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
+
+  } catch (error) {
+    console.error('转账错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 获取系统配置
-  async getSystemSettings(req, res) {
-    try {
-      const settings = await SystemSetting.find({ is_public: true });
-      
-      const settingsObj = {};
-      settings.forEach(setting => {
-        let value = setting.setting_value;
-        
-        // 根据类型转换值
-        switch (setting.setting_type) {
-          case 'number':
-            value = parseFloat(value);
-            break;
-          case 'boolean':
-            value = value === 'true';
-            break;
-          case 'json':
-            value = JSON.parse(value);
-            break;
-        }
-        
-        settingsObj[setting.setting_key] = value;
-      });
+// 获取余额
+const getBalance = async (req, res) => {
+  try {
+    const { userId } = req.params;
 
-      res.json({
-        success: true,
-        settings: settingsObj
-      });
+    const result = await pool.query(`
+      SELECT wallet_balance FROM users WHERE user_id = $1
+    `, [userId]);
 
-    } catch (error) {
-      console.error('获取系统配置错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: '用户不存在' });
     }
+
+    res.json({
+      balance: parseFloat(result.rows[0].wallet_balance)
+    });
+
+  } catch (error) {
+    console.error('获取余额错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
+};
 
-  // 验证支付密码
-  async verifyPaymentPassword(req, res) {
-    try {
-      const userId = req.user.userId;
-      const { password } = req.body;
+// 获取钱包统计
+const getWalletStats = async (req, res) => {
+  try {
+    const { userId } = req.params;
 
-      // 这里应该从用户表中获取支付密码哈希
-      // 为了演示，我们假设用户有一个支付密码字段
-      const user = await User.findOne({ user_id: userId });
-      
-      if (!user || !user.payment_password_hash) {
-        return res.status(400).json({
-          success: false,
-          message: '请先设置支付密码'
-        });
-      }
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as total_transactions,
+        COALESCE(SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END), 0) as total_deposits,
+        COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals,
+        COALESCE(SUM(CASE WHEN type = 'task_reward' THEN amount ELSE 0 END), 0) as total_rewards,
+        COALESCE(SUM(CASE WHEN type = 'task_payment' THEN amount ELSE 0 END), 0) as total_payments,
+        COALESCE(SUM(CASE WHEN type = 'transfer' AND user_id = $1 THEN amount ELSE 0 END), 0) as total_sent,
+        COALESCE(SUM(CASE WHEN type = 'transfer' AND target_user_id = $1 THEN amount ELSE 0 END), 0) as total_received
+      FROM transactions 
+      WHERE user_id = $1 AND status = 'completed'
+    `, [userId]);
 
-      const isValid = await bcrypt.compare(password, user.payment_password_hash);
-      
-      if (!isValid) {
-        return res.status(400).json({
-          success: false,
-          message: '支付密码错误'
-        });
-      }
+    const stats = result.rows[0];
 
-      res.json({
-        success: true,
-        message: '支付密码验证成功'
-      });
+    res.json({
+      totalTransactions: parseInt(stats.total_transactions),
+      totalDeposits: parseFloat(stats.total_deposits),
+      totalWithdrawals: parseFloat(stats.total_withdrawals),
+      totalRewards: parseFloat(stats.total_rewards),
+      totalPayments: parseFloat(stats.total_payments),
+      totalSent: parseFloat(stats.total_sent),
+      totalReceived: parseFloat(stats.total_received)
+    });
 
-    } catch (error) {
-      console.error('验证支付密码错误:', error);
-      res.status(500).json({
-        success: false,
-        message: '服务器内部错误'
-      });
-    }
+  } catch (error) {
+    console.error('获取钱包统计错误:', error);
+    res.status(500).json({ message: '服务器内部错误' });
   }
-}
+};
 
-module.exports = new WalletController();
+module.exports = {
+  getWallet,
+  getTransactions,
+  topUp,
+  withdraw,
+  transfer,
+  getBalance,
+  getWalletStats
+};

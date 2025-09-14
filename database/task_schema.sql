@@ -1,131 +1,104 @@
--- 任务系统数据库结构
--- 支持 PostgreSQL 和 MongoDB
+-- 任务相关表结构
+-- PostgreSQL 数据库
 
--- ============================================
--- 任务表 (Tasks Table)
--- ============================================
+-- 任务表
 CREATE TABLE tasks (
-    task_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id SERIAL PRIMARY KEY,
     title VARCHAR(200) NOT NULL,
     description TEXT NOT NULL,
     category VARCHAR(50) NOT NULL,
-    subcategory VARCHAR(50),
     reward DECIMAL(10,2) NOT NULL,
-    currency VARCHAR(3) DEFAULT 'CNY',
-    deadline TIMESTAMP,
-    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'in_progress', 'completed', 'cancelled', 'disputed')),
-    priority VARCHAR(10) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-    
-    -- 地理位置信息
-    country VARCHAR(100),
-    city VARCHAR(100),
-    region VARCHAR(100),
-    
-    -- 任务要求
-    skills_required TEXT[], -- 技能标签数组
-    experience_level VARCHAR(20) DEFAULT 'any' CHECK (experience_level IN ('any', 'beginner', 'intermediate', 'expert')),
-    estimated_hours INTEGER,
-    
-    -- 附件和媒体
-    attachments JSONB, -- 存储附件信息
-    images TEXT[], -- 图片URL数组
-    
-    -- 用户关联
-    publisher_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
-    hunter_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
-    
-    -- 时间戳
+    deadline TIMESTAMP NOT NULL,
+    location VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
+    publisher_id INTEGER REFERENCES users(user_id),
+    hunter_id INTEGER REFERENCES users(user_id),
+    completion_note TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP,
-    
-    -- 任务设置
-    is_public BOOLEAN DEFAULT TRUE,
-    auto_assign BOOLEAN DEFAULT FALSE,
-    max_applicants INTEGER DEFAULT 10,
-    
-    -- 任务统计
-    view_count INTEGER DEFAULT 0,
-    application_count INTEGER DEFAULT 0,
-    
-    -- 任务标签
-    tags TEXT[]
+    completed_at TIMESTAMP
 );
 
--- 任务申请表 (Task Applications)
-CREATE TABLE task_applications (
-    application_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID REFERENCES tasks(task_id) ON DELETE CASCADE,
-    hunter_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
-    application_message TEXT,
-    proposed_reward DECIMAL(10,2), -- 猎人提出的价格
-    estimated_completion_date TIMESTAMP,
-    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'withdrawn')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    -- 确保一个猎人只能申请一次同一个任务
-    UNIQUE(task_id, hunter_id)
-);
-
--- 任务进度表 (Task Progress)
-CREATE TABLE task_progress (
-    progress_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID REFERENCES tasks(task_id) ON DELETE CASCADE,
-    hunter_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
-    progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
-    progress_note TEXT,
-    attachments JSONB, -- 进度附件
+-- 任务附件表
+CREATE TABLE task_attachments (
+    attachment_id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES tasks(task_id) ON DELETE CASCADE,
+    filename VARCHAR(255) NOT NULL,
+    file_url VARCHAR(500) NOT NULL,
+    file_size INTEGER,
+    file_type VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 任务交付表 (Task Deliverables)
-CREATE TABLE task_deliverables (
-    deliverable_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    task_id UUID REFERENCES tasks(task_id) ON DELETE CASCADE,
-    hunter_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
-    file_urls TEXT[], -- 交付文件URL数组
-    file_types TEXT[], -- 文件类型数组
-    file_sizes BIGINT[], -- 文件大小数组
-    status VARCHAR(20) DEFAULT 'submitted' CHECK (status IN ('submitted', 'approved', 'rejected', 'revision_requested')),
-    publisher_feedback TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 任务完成附件表
+CREATE TABLE task_completion_attachments (
+    attachment_id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES tasks(task_id) ON DELETE CASCADE,
+    filename VARCHAR(255) NOT NULL,
+    file_url VARCHAR(500) NOT NULL,
+    file_size INTEGER,
+    file_type VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 任务分类表 (Task Categories)
+-- 任务分类表
 CREATE TABLE task_categories (
-    category_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
     description TEXT,
-    icon VARCHAR(50), -- 图标名称或URL
-    parent_category_id UUID REFERENCES task_categories(category_id),
-    sort_order INTEGER DEFAULT 0,
+    icon VARCHAR(50),
+    color VARCHAR(20),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 任务标签表 (Task Tags)
+-- 任务标签表
 CREATE TABLE task_tags (
-    tag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tag_id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
-    description TEXT,
-    color VARCHAR(7), -- 十六进制颜色代码
-    usage_count INTEGER DEFAULT 0,
+    color VARCHAR(20),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 任务技能表 (Task Skills)
-CREATE TABLE task_skills (
-    skill_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) UNIQUE NOT NULL,
-    category VARCHAR(50),
+-- 任务标签关联表
+CREATE TABLE task_tag_relations (
+    task_id INTEGER REFERENCES tasks(task_id) ON DELETE CASCADE,
+    tag_id INTEGER REFERENCES task_tags(tag_id) ON DELETE CASCADE,
+    PRIMARY KEY (task_id, tag_id)
+);
+
+-- 任务浏览记录表
+CREATE TABLE task_views (
+    view_id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES tasks(task_id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+    ip_address INET,
+    user_agent TEXT,
+    viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(task_id, user_id)
+);
+
+-- 任务收藏表
+CREATE TABLE task_favorites (
+    favorite_id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES tasks(task_id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(task_id, user_id)
+);
+
+-- 任务举报表
+CREATE TABLE task_reports (
+    report_id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES tasks(task_id) ON DELETE CASCADE,
+    reporter_id INTEGER REFERENCES users(user_id),
+    reason VARCHAR(100) NOT NULL,
     description TEXT,
-    usage_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'resolved', 'dismissed')),
+    admin_notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP,
+    reviewed_by INTEGER REFERENCES users(user_id)
 );
 
 -- 创建索引
@@ -135,114 +108,60 @@ CREATE INDEX idx_tasks_publisher ON tasks(publisher_id);
 CREATE INDEX idx_tasks_hunter ON tasks(hunter_id);
 CREATE INDEX idx_tasks_deadline ON tasks(deadline);
 CREATE INDEX idx_tasks_reward ON tasks(reward);
-CREATE INDEX idx_tasks_created ON tasks(created_at);
-CREATE INDEX idx_tasks_location ON tasks(country, city);
-CREATE INDEX idx_tasks_public ON tasks(is_public);
+CREATE INDEX idx_tasks_created_at ON tasks(created_at);
+CREATE INDEX idx_task_attachments_task ON task_attachments(task_id);
+CREATE INDEX idx_task_completion_attachments_task ON task_completion_attachments(task_id);
+CREATE INDEX idx_task_views_task ON task_views(task_id);
+CREATE INDEX idx_task_views_user ON task_views(user_id);
+CREATE INDEX idx_task_favorites_task ON task_favorites(task_id);
+CREATE INDEX idx_task_favorites_user ON task_favorites(user_id);
+CREATE INDEX idx_task_reports_task ON task_reports(task_id);
+CREATE INDEX idx_task_reports_reporter ON task_reports(reporter_id);
 
-CREATE INDEX idx_applications_task ON task_applications(task_id);
-CREATE INDEX idx_applications_hunter ON task_applications(hunter_id);
-CREATE INDEX idx_applications_status ON task_applications(status);
+-- 插入默认任务分类
+INSERT INTO task_categories (name, description, icon, color) VALUES 
+('design', '设计类任务', '🎨', '#8b5cf6'),
+('development', '开发类任务', '💻', '#3b82f6'),
+('writing', '写作类任务', '✍️', '#10b981'),
+('translation', '翻译类任务', '🌐', '#f59e0b'),
+('data_entry', '数据录入任务', '📊', '#6b7280'),
+('marketing', '营销类任务', '📢', '#ef4444'),
+('research', '研究类任务', '🔬', '#8b5cf6'),
+('other', '其他类型任务', '📋', '#6b7280');
 
-CREATE INDEX idx_progress_task ON task_progress(task_id);
-CREATE INDEX idx_progress_hunter ON task_progress(hunter_id);
+-- 插入默认任务标签
+INSERT INTO task_tags (name, color) VALUES 
+('urgent', '#ef4444'),
+('high-priority', '#f59e0b'),
+('easy', '#10b981'),
+('difficult', '#8b5cf6'),
+('long-term', '#3b82f6'),
+('short-term', '#06b6d4'),
+('remote', '#84cc16'),
+('on-site', '#f97316');
 
-CREATE INDEX idx_deliverables_task ON task_deliverables(task_id);
-CREATE INDEX idx_deliverables_hunter ON task_deliverables(hunter_id);
+-- 创建触发器：更新任务修改时间
+CREATE OR REPLACE FUNCTION update_task_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- 插入默认分类数据
-INSERT INTO task_categories (name, description, icon, sort_order) VALUES
-('技术开发', '软件开发、网站建设、移动应用等技术相关任务', '💻', 1),
-('设计创意', 'UI/UX设计、平面设计、视频制作等创意类任务', '🎨', 2),
-('写作翻译', '文案写作、翻译、内容创作等文字类任务', '✍️', 3),
-('营销推广', '社交媒体运营、SEO优化、广告投放等营销任务', '📈', 4),
-('数据分析', '数据收集、分析、报告等数据相关任务', '📊', 5),
-('其他服务', '其他类型的服务任务', '🔧', 6);
+CREATE TRIGGER trigger_update_task_updated_at
+    BEFORE UPDATE ON tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_task_updated_at();
 
--- 插入默认技能标签
-INSERT INTO task_skills (name, category, description) VALUES
-('React', '前端开发', 'React.js 前端框架'),
-('Vue.js', '前端开发', 'Vue.js 前端框架'),
-('Node.js', '后端开发', 'Node.js 后端开发'),
-('Python', '编程语言', 'Python 编程语言'),
-('JavaScript', '编程语言', 'JavaScript 编程语言'),
-('UI设计', '设计', '用户界面设计'),
-('UX设计', '设计', '用户体验设计'),
-('Photoshop', '设计工具', 'Adobe Photoshop'),
-('Figma', '设计工具', 'Figma 设计工具'),
-('文案写作', '写作', '营销文案写作'),
-('SEO优化', '营销', '搜索引擎优化'),
-('社交媒体', '营销', '社交媒体运营');
-
--- ============================================
--- MongoDB 等效结构 (JSON Schema)
--- ============================================
-/*
-{
-  "tasks": {
-    "_id": "ObjectId",
-    "title": "String",
-    "description": "String",
-    "category": "String",
-    "subcategory": "String",
-    "reward": "Decimal",
-    "currency": "String",
-    "deadline": "Date",
-    "status": "String (enum)",
-    "priority": "String (enum)",
-    "country": "String",
-    "city": "String",
-    "region": "String",
-    "skills_required": ["String"],
-    "experience_level": "String",
-    "estimated_hours": "Number",
-    "attachments": "Object",
-    "images": ["String"],
-    "publisher_id": "ObjectId",
-    "hunter_id": "ObjectId",
-    "created_at": "Date",
-    "updated_at": "Date",
-    "started_at": "Date",
-    "completed_at": "Date",
-    "is_public": "Boolean",
-    "auto_assign": "Boolean",
-    "max_applicants": "Number",
-    "view_count": "Number",
-    "application_count": "Number",
-    "tags": ["String"]
-  },
-  "task_applications": {
-    "_id": "ObjectId",
-    "task_id": "ObjectId",
-    "hunter_id": "ObjectId",
-    "application_message": "String",
-    "proposed_reward": "Decimal",
-    "estimated_completion_date": "Date",
-    "status": "String (enum)",
-    "created_at": "Date",
-    "updated_at": "Date"
-  },
-  "task_progress": {
-    "_id": "ObjectId",
-    "task_id": "ObjectId",
-    "hunter_id": "ObjectId",
-    "progress_percentage": "Number",
-    "progress_note": "String",
-    "attachments": "Object",
-    "created_at": "Date"
-  },
-  "task_deliverables": {
-    "_id": "ObjectId",
-    "task_id": "ObjectId",
-    "hunter_id": "ObjectId",
-    "title": "String",
-    "description": "String",
-    "file_urls": ["String"],
-    "file_types": ["String"],
-    "file_sizes": ["Number"],
-    "status": "String (enum)",
-    "publisher_feedback": "String",
-    "created_at": "Date",
-    "updated_at": "Date"
-  }
-}
-*/
+-- 创建视图：任务统计
+CREATE VIEW task_stats AS
+SELECT 
+    COUNT(*) as total_tasks,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_tasks,
+    COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_tasks,
+    COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_tasks,
+    COALESCE(AVG(reward), 0) as average_reward,
+    COALESCE(SUM(reward), 0) as total_reward
+FROM tasks;

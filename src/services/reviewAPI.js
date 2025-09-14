@@ -1,302 +1,192 @@
-// 评价相关API服务
+import axios from 'axios';
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-class ReviewAPI {
-  // 提交任务评价
-  async submitReview(reviewData) {
+// 创建axios实例
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// 请求拦截器 - 添加token
+api.interceptors.request.use(
+  (config) => {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(reviewData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '提交评价失败');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
-    return await response.json();
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
+);
 
-  // 获取任务评价列表
-  async getTaskReviews(taskId, params = {}) {
-    const queryParams = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/reviews?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取评价列表失败');
+// 评价相关API
+export const reviewAPI = {
+  // 创建评价
+  createReview: async (reviewData) => {
+    try {
+      const response = await api.post('/reviews', reviewData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '创建评价失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取用户评价列表
-  async getUserReviews(userId, params = {}) {
-    const queryParams = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/reviews?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取用户评价失败');
+  // 获取用户评价
+  getUserReviews: async (userId, page = 1, limit = 20) => {
+    try {
+      const response = await api.get(`/users/${userId}/reviews`, {
+        params: { page, limit }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取用户评价失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取用户信誉信息
-  async getUserReputation(userId) {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/reputation`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取信誉信息失败');
+  // 获取任务评价
+  getTaskReviews: async (taskId) => {
+    try {
+      const response = await api.get(`/tasks/${taskId}/reviews`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取任务评价失败');
     }
-
-    return await response.json();
-  }
+  },
 
   // 更新评价
-  async updateReview(reviewId, reviewData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews/${reviewId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(reviewData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '更新评价失败');
+  updateReview: async (reviewId, reviewData) => {
+    try {
+      const response = await api.put(`/reviews/${reviewId}`, reviewData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '更新评价失败');
     }
-
-    return await response.json();
-  }
+  },
 
   // 删除评价
-  async deleteReview(reviewId) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews/${reviewId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '删除评价失败');
+  deleteReview: async (reviewId) => {
+    try {
+      const response = await api.delete(`/reviews/${reviewId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '删除评价失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 回复评价
-  async replyToReview(reviewId, replyData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews/${reviewId}/replies`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(replyData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '回复评价失败');
+  // 获取评价详情
+  getReview: async (reviewId) => {
+    try {
+      const response = await api.get(`/reviews/${reviewId}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取评价详情失败');
     }
+  },
 
-    return await response.json();
-  }
+  // 获取用户信誉评分
+  getUserReputation: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}/reputation`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取用户信誉评分失败');
+    }
+  },
 
   // 举报评价
-  async reportReview(reviewId, reportData) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews/${reviewId}/report`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(reportData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '举报评价失败');
+  reportReview: async (reviewId, reason) => {
+    try {
+      const response = await api.post(`/reviews/${reviewId}/report`, {
+        reason
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '举报评价失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 标记评价有用
-  async markReviewHelpful(reviewId) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews/${reviewId}/helpful`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '标记有用失败');
+  // 获取评价统计
+  getReviewStats: async (userId) => {
+    try {
+      const response = await api.get(`/users/${userId}/review-stats`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取评价统计失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取信誉徽章列表
-  async getReputationBadges() {
-    const response = await fetch(`${API_BASE_URL}/reputation/badges`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取徽章列表失败');
+  // 搜索评价
+  searchReviews: async (query, params = {}) => {
+    try {
+      const response = await api.get('/reviews/search', {
+        params: { query, ...params }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '搜索评价失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取用户徽章
-  async getUserBadges(userId) {
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/badges`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取用户徽章失败');
+  // 获取最新评价
+  getLatestReviews: async (limit = 10) => {
+    try {
+      const response = await api.get('/reviews/latest', {
+        params: { limit }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取最新评价失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取信誉统计
-  async getReputationStats(userId, params = {}) {
-    const queryParams = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/reputation/stats?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取信誉统计失败');
+  // 获取高评分用户
+  getTopRatedUsers: async (limit = 10) => {
+    try {
+      const response = await api.get('/reviews/top-rated-users', {
+        params: { limit }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取高评分用户失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 获取信誉历史
-  async getReputationHistory(userId, params = {}) {
-    const queryParams = new URLSearchParams(params);
-    const response = await fetch(`${API_BASE_URL}/users/${userId}/reputation/history?${queryParams}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取信誉历史失败');
+  // 验证是否可以评价
+  canReview: async (taskId, userId) => {
+    try {
+      const response = await api.get(`/reviews/can-review`, {
+        params: { taskId, userId }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '验证评价权限失败');
     }
-
-    return await response.json();
-  }
-
-  // 检查是否可以评价
-  async canReview(taskId, reviewType) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/reviews/can-review`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ task_id: taskId, review_type: reviewType }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '检查评价权限失败');
-    }
-
-    return await response.json();
-  }
+  },
 
   // 获取评价模板
-  async getReviewTemplates(reviewType) {
-    const response = await fetch(`${API_BASE_URL}/reviews/templates?type=${reviewType}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '获取评价模板失败');
+  getReviewTemplates: async () => {
+    try {
+      const response = await api.get('/reviews/templates');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '获取评价模板失败');
     }
+  },
 
-    return await response.json();
-  }
-
-  // 批量获取用户信誉
-  async getBatchUserReputation(userIds) {
-    const response = await fetch(`${API_BASE_URL}/reputation/batch`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ user_ids: userIds }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || '批量获取信誉失败');
+  // 批量评价
+  batchReview: async (reviews) => {
+    try {
+      const response = await api.post('/reviews/batch', { reviews });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || '批量评价失败');
     }
-
-    return await response.json();
   }
-}
+};
 
-export const reviewAPI = new ReviewAPI();
+export default reviewAPI;
