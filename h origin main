@@ -1,0 +1,5 @@
+[33m8a6fc67[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m 修复vercel.json配置问题，删除无效配置文件
+[33ma58878d[m[33m ([m[1;31morigin/main[m[33m)[m 添加Supabase集成和API配置
+[33m2a52ff9[m 解决合并冲突，完成项目整合
+[33mdbd37ca[m 完成赏金猎人平台开发 - 添加所有组件、页面、API服务和数据库结构
+[33maa4c413[m Add files via upload
