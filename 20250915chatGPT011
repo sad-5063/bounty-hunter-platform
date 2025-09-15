@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>赏金公会 - 个人主页</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🏹 赏金公会</h1>
+    <p>个人主页</p>
+    <div id="userInfo"></div>
+    <nav>
+      <a href="index.html">任务大厅</a> |
+      <a href="profile.html">个人主页</a> |
+      <button onclick="logout()">退出登录</button>
+    </nav>
+  </header>
+
+  <main>
+    <section>
+      <h2>我发布的任务</h2>
+      <ul id="myTasks"></ul>
+    </section>
+
+    <section>
+      <h2>我接取的任务</h2>
+      <ul id="acceptedTasks"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2025 赏金公会</p>
+  </footer>
+
+  <script src="script.js"></script>
+  <script>
+    const currentUser = localStorage.getItem("currentUser");
+    if (!currentUser) {
+      window.location.href = "login.html";
+    }
+
+    document.getElementById("userInfo").innerText = "当前用户: " + currentUser;
+
+    const tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+
+    function renderProfile() {
+      const myTasksList = document.getElementById("myTasks");
+      const acceptedTasksList = document.getElementById("acceptedTasks");
+
+      myTasksList.innerHTML = "";
+      acceptedTasksList.innerHTML = "";
+
+      tasks.forEach(task => {
+        const li = document.createElement("li");
+        li.className = "task";
+        li.innerHTML = `
+          <strong>${task.title}</strong> - ¥${task.reward} 
+          <span class="status">(${task.status})</span>
+          <p>${task.description}</p>
+        `;
+
+        if (task.creator === currentUser) {
+          myTasksList.appendChild(li);
+        }
+
+        if (task.acceptor === currentUser) {
+          acceptedTasksList.appendChild(li);
+        }
+      });
+    }
+
+    renderProfile();
+  </script>
+</body>
+</html>
