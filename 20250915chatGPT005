@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>赏金公会 - 登录</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🏹 赏金公会</h1>
+    <p>登录或注册账号</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>登录</h2>
+      <form id="loginForm">
+        <input type="text" id="loginUsername" placeholder="用户名" required>
+        <input type="password" id="loginPassword" placeholder="密码" required>
+        <button type="submit">登录</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>注册</h2>
+      <form id="registerForm">
+        <input type="text" id="regUsername" placeholder="用户名" required>
+        <input type="password" id="regPassword" placeholder="密码" required>
+        <button type="submit">注册</button>
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2025 赏金公会</p>
+  </footer>
+
+  <script>
+    let users = JSON.parse(localStorage.getItem("users")) || {};
+
+    // 注册
+    document.getElementById("registerForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const username = document.getElementById("regUsername").value;
+      const password = document.getElementById("regPassword").value;
+
+      if (users[username]) {
+        alert("用户名已存在！");
+        return;
+      }
+      users[username] = { password: password };
+      localStorage.setItem("users", JSON.stringify(users));
+      alert("注册成功，请登录！");
+      document.getElementById("registerForm").reset();
+    });
+
+    // 登录
+    document.getElementById("loginForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const username = document.getElementById("loginUsername").value;
+      const password = document.getElementById("loginPassword").value;
+
+      if (users[username] && users[username].password === password) {
+        localStorage.setItem("currentUser", username);
+        window.location.href = "index.html";
+      } else {
+        alert("用户名或密码错误！");
+      }
+    });
+  </script>
+</body>
+</html>
