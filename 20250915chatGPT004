@@ -1,0 +1,5 @@
+bounty-guild/
+│── index.html   (主页面，登录后使用)
+│── login.html   (登录/注册页面)
+│── style.css
+│── script.js
