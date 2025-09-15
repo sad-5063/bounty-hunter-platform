@@ -1,84 +1,24 @@
-version: '3.8'
-
+version: "3.8"
 services:
-  # 前端服务
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "3000:80"
+  db:
+    image: postgres:15
+    restart: always
     environment:
-      - NODE_ENV=production
-      - REACT_APP_API_URL=http://localhost:3001/api
-    depends_on:
-      - backend
-    networks:
-      - bounty-network
-
-  # 后端服务
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://bounty_user:bounty_password@postgres:5432/bounty_hunter
-      - JWT_SECRET=your-super-secret-jwt-key
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - bounty-network
-
-  # PostgreSQL 数据库
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_DB=bounty_hunter
-      - POSTGRES_USER=bounty_user
-      - POSTGRES_PASSWORD=bounty_password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: bounty
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    networks:
-      - bounty-network
 
-  # Redis 缓存
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - bounty-network
-
-  # Nginx 反向代理
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl:/etc/nginx/ssl
+  web:
+    build: .
+    env_file: .env
     depends_on:
-      - frontend
-      - backend
-    networks:
-      - bounty-network
+      - db
+    ports:
+      - "3000:3000"
 
 volumes:
-  postgres_data:
-  redis_data:
-
-networks:
-  bounty-network:
-    driver: bridge
-
+  db-data:
