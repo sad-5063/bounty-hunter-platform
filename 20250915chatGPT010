@@ -1,0 +1,6 @@
+bounty-guild/
+│── index.html     (主页面，任务大厅)
+│── login.html     (登录 / 注册)
+│── profile.html   (个人主页)
+│── style.css
+│── script.js
