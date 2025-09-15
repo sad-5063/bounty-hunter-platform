@@ -1,0 +1,78 @@
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+const currentUser = localStorage.getItem("currentUser");
+
+if (!currentUser) {
+  // 如果没登录，跳回登录页
+  window.location.href = "login.html";
+}
+
+document.getElementById("userInfo").innerText = "当前用户: " + currentUser;
+
+const taskForm = document.getElementById("taskForm");
+const taskList = document.getElementById("tasks");
+
+function renderTasks() {
+  taskList.innerHTML = "";
+  tasks.forEach((task, index) => {
+    const li = document.createElement("li");
+    li.className = "task";
+    li.innerHTML = `
+      <strong>${task.title}</strong> - ¥${task.reward} <br>
+      <p>${task.description}</p>
+      <span class="status">状态: ${task.status}</span><br>
+      发布者: ${task.creator} <br>
+      ${
+        task.status === "待接取" && task.creator !== currentUser
+          ? `<button onclick="acceptTask(${index})">接取任务</button>`
+          : task.status === "进行中" && task.acceptor === currentUser
+          ? `<button onclick="completeTask(${index})">完成任务</button>`
+          : ""
+      }
+    `;
+    taskList.appendChild(li);
+  });
+}
+
+function saveTasks() {
+  localStorage.setItem("tasks", JSON.stringify(tasks));
+}
+
+taskForm.addEventListener("submit", function (e) {
+  e.preventDefault();
+  const title = document.getElementById("title").value;
+  const description = document.getElementById("description").value;
+  const reward = document.getElementById("reward").value;
+
+  tasks.push({
+    title,
+    description,
+    reward,
+    status: "待接取",
+    creator: currentUser,
+    acceptor: null
+  });
+
+  saveTasks();
+  renderTasks();
+  taskForm.reset();
+});
+
+function acceptTask(index) {
+  tasks[index].status = "进行中";
+  tasks[index].acceptor = currentUser;
+  saveTasks();
+  renderTasks();
+}
+
+function completeTask(index) {
+  tasks[index].status = "已完成";
+  saveTasks();
+  renderTasks();
+}
+
+function logout() {
+  localStorage.removeItem("currentUser");
+  window.location.href = "login.html";
+}
+
+renderTasks();
